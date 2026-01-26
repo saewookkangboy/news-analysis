@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"  # 안정적인 모델 사용
+    GEMINI_MODEL: str = "gemini-2.5-flash"  # 최신 모델 사용
     
     def __init__(self, **kwargs):
         """환경 변수를 직접 읽어서 설정 (Vercel 호환성)"""

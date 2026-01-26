@@ -243,14 +243,14 @@ async def _analyze_with_gemini(
         logger.info("🚀 Gemini API 호출 시작")
         logger.info(f"API 키 확인: ✅ (길이: {len(api_key)} 문자)")
         logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}")
-        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')}")
+        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')}")
         logger.info("=" * 60)
         
         # 프롬프트 생성
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
         
-        # 모델 설정 (기본값: gemini-1.5-flash)
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
+        # 모델 설정 (기본값: gemini-2.5-flash)
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         logger.info(f"Gemini API 클라이언트 초기화 중... (모델: {model_name})")
         
         # 새로운 Gemini API 방식 시도 (from google import genai)
