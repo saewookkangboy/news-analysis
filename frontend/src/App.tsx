@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import ScenarioManager from './components/ScenarioManager';
@@ -9,9 +9,15 @@ import Navigation from './components/Navigation';
 import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
 import NetworkStatus from './components/NetworkStatus';
+import { setupGlobalErrorHandler } from './utils/errorHandler';
 import './App.css';
 
 function App() {
+  useEffect(() => {
+    // 전역 오류 핸들러 설정 (브라우저 확장 프로그램 오류 필터링)
+    setupGlobalErrorHandler();
+  }, []);
+
   return (
     <ErrorBoundary>
       <Router>

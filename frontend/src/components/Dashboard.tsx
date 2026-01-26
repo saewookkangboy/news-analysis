@@ -10,6 +10,7 @@ import CategoryMetricsComponent from './CategoryMetrics';
 import AnalysisSettings from './AnalysisSettings';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
+import { handleApiError } from '../utils/errorHandler';
 import { DashboardService, CategoryType } from '../services/dashboardService';
 import { DashboardOverview, FunnelData, KPITrend, RecentEvent, ScenarioPerformance, CategoryMetrics } from '../services/dashboardService';
 
@@ -119,9 +120,12 @@ const Dashboard: React.FC = React.memo(() => {
       cache.set(cacheKey, dashboardData, category);
       setDashboardData(dashboardData);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '대시보드 데이터를 불러오는 중 오류가 발생했습니다.';
-      setError(errorMessage);
-      console.error('Dashboard data fetch error:', err);
+      const errorMessage = handleApiError(err) || '대시보드 데이터를 불러오는 중 오류가 발생했습니다.';
+      // 무시해도 되는 오류는 사용자에게 표시하지 않음
+      if (errorMessage) {
+        setError(errorMessage);
+        console.error('Dashboard data fetch error:', err);
+      }
     } finally {
       setLoading(false);
     }
