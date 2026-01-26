@@ -6,6 +6,7 @@ import CustomerJourneyMap from './components/CustomerJourneyMap';
 import KPIAnalytics from './components/KPIAnalytics';
 import Settings from './components/Settings';
 import Navigation from './components/Navigation';
+import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
 import NetworkStatus from './components/NetworkStatus';
 import './App.css';
@@ -26,6 +27,7 @@ function App() {
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
+          <Footer />
         </div>
       </Router>
     </ErrorBoundary>

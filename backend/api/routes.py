@@ -2,10 +2,12 @@
 API 라우트
 """
 import logging
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Body, Query
 
 from backend.services.target_analyzer import analyze_target
+from backend.services.sentiment_analyzer import analyze_sentiment, analyze_context, analyze_tone
+from backend.services.keyword_recommender import recommend_keywords
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +19,13 @@ async def analyze_target_endpoint(
     target_keyword: str = Body(..., description="분석할 타겟 키워드 또는 주제"),
     target_type: str = Body("keyword", description="분석 유형: keyword, audience, competitor"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부"),
+    start_date: Optional[str] = Body(None, description="분석 시작일 (YYYY-MM-DD 형식)"),
+    end_date: Optional[str] = Body(None, description="분석 종료일 (YYYY-MM-DD 형식)"),
+    include_sentiment: bool = Body(True, description="정성적 분석 포함 여부"),
+    include_recommendations: bool = Body(True, description="키워드 추천 포함 여부")
 ):
-    """AI를 사용하여 타겟 분석을 수행합니다."""
+    """AI를 사용하여 타겟 분석을 수행합니다. 정성적 분석 및 키워드 추천 옵션 포함."""
     try:
         logger.info(f"타겟 분석 요청: {target_keyword} ({target_type})")
         
@@ -35,8 +41,50 @@ async def analyze_target_endpoint(
             target_keyword=target_keyword,
             target_type=target_type,
             additional_context=additional_context,
-            use_gemini=use_gemini
+            use_gemini=use_gemini,
+            start_date=start_date,
+            end_date=end_date
         )
+        
+        # 정성적 분석 포함
+        if include_sentiment:
+            try:
+                sentiment_result = await analyze_sentiment(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                )
+                result["sentiment"] = sentiment_result.get("sentiment", {})
+                
+                context_result = await analyze_context(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                )
+                result["context"] = context_result.get("context", {})
+                
+                tone_result = await analyze_tone(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                )
+                result["tone"] = tone_result.get("tone", {})
+            except Exception as e:
+                logger.warning(f"정성적 분석 중 오류 (무시됨): {e}")
+        
+        # 키워드 추천 포함
+        if include_recommendations:
+            try:
+                recommendations = await recommend_keywords(
+                    target_keyword=target_keyword,
+                    recommendation_type="all",
+                    max_results=10,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                )
+                result["recommendations"] = recommendations
+            except Exception as e:
+                logger.warning(f"키워드 추천 중 오류 (무시됨): {e}")
         
         logger.info(f"타겟 분석 완료: {target_keyword} ({target_type})")
         
@@ -60,7 +108,9 @@ async def analyze_target_get(
     target_keyword: str = Query(..., description="분석할 타겟 키워드 또는 주제"),
     target_type: str = Query("keyword", description="분석 유형: keyword, audience, competitor"),
     additional_context: Optional[str] = Query(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Query(False, description="Gemini API 사용 여부")
+    use_gemini: bool = Query(False, description="Gemini API 사용 여부"),
+    start_date: Optional[str] = Query(None, description="분석 시작일 (YYYY-MM-DD 형식)"),
+    end_date: Optional[str] = Query(None, description="분석 종료일 (YYYY-MM-DD 형식)")
 ):
     """AI를 사용하여 타겟 분석을 수행합니다. (GET 방식)"""
     try:
@@ -78,7 +128,9 @@ async def analyze_target_get(
             target_keyword=target_keyword,
             target_type=target_type,
             additional_context=additional_context,
-            use_gemini=use_gemini
+            use_gemini=use_gemini,
+            start_date=start_date,
+            end_date=end_date
         )
         
         logger.info(f"타겟 분석 완료: {target_keyword} ({target_type})")
@@ -95,4 +147,269 @@ async def analyze_target_get(
         raise HTTPException(
             status_code=500,
             detail=f"타겟 분석 실패: {str(e)}"
+        )
+
+
+@router.post("/analysis/sentiment")
+async def analyze_sentiment_endpoint(
+    target_keyword: str = Body(..., description="분석할 키워드"),
+    additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+):
+    """감정 분석을 수행합니다."""
+    try:
+        logger.info(f"감정 분석 요청: {target_keyword}")
+        
+        result = await analyze_sentiment(
+            target_keyword=target_keyword,
+            additional_context=additional_context,
+            use_gemini=use_gemini
+        )
+        
+        return {
+            "success": True,
+            "data": result
+        }
+        
+    except Exception as e:
+        logger.error(f"감정 분석 중 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"감정 분석 실패: {str(e)}"
+        )
+
+
+@router.post("/analysis/context")
+async def analyze_context_endpoint(
+    target_keyword: str = Body(..., description="분석할 키워드"),
+    additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+):
+    """맥락 분석을 수행합니다."""
+    try:
+        logger.info(f"맥락 분석 요청: {target_keyword}")
+        
+        result = await analyze_context(
+            target_keyword=target_keyword,
+            additional_context=additional_context,
+            use_gemini=use_gemini
+        )
+        
+        return {
+            "success": True,
+            "data": result
+        }
+        
+    except Exception as e:
+        logger.error(f"맥락 분석 중 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"맥락 분석 실패: {str(e)}"
+        )
+
+
+@router.post("/analysis/tone")
+async def analyze_tone_endpoint(
+    target_keyword: str = Body(..., description="분석할 키워드"),
+    additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+):
+    """톤 분석을 수행합니다."""
+    try:
+        logger.info(f"톤 분석 요청: {target_keyword}")
+        
+        result = await analyze_tone(
+            target_keyword=target_keyword,
+            additional_context=additional_context,
+            use_gemini=use_gemini
+        )
+        
+        return {
+            "success": True,
+            "data": result
+        }
+        
+    except Exception as e:
+        logger.error(f"톤 분석 중 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"톤 분석 실패: {str(e)}"
+        )
+
+
+@router.post("/recommend/keywords")
+async def recommend_keywords_endpoint(
+    target_keyword: str = Body(..., description="기준 키워드"),
+    recommendation_type: str = Body("all", description="추천 유형: all, semantic, co_occurring, hierarchical, trending, alternative"),
+    max_results: int = Body(10, description="최대 결과 수"),
+    additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+):
+    """관련 키워드를 추천합니다."""
+    try:
+        logger.info(f"키워드 추천 요청: {target_keyword} (유형: {recommendation_type})")
+        
+        if recommendation_type not in ["all", "semantic", "co_occurring", "hierarchical", "trending", "alternative"]:
+            raise HTTPException(
+                status_code=400,
+                detail="recommendation_type은 'all', 'semantic', 'co_occurring', 'hierarchical', 'trending', 'alternative' 중 하나여야 합니다."
+            )
+        
+        result = await recommend_keywords(
+            target_keyword=target_keyword,
+            recommendation_type=recommendation_type,
+            max_results=max_results,
+            additional_context=additional_context,
+            use_gemini=use_gemini
+        )
+        
+        return {
+            "success": True,
+            "data": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"키워드 추천 중 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"키워드 추천 실패: {str(e)}"
+        )
+
+
+@router.post("/analysis/comprehensive")
+async def comprehensive_analysis_endpoint(
+    target_keyword: str = Body(..., description="분석할 키워드"),
+    target_type: str = Body("keyword", description="분석 유형: keyword, audience, competitor"),
+    additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부"),
+    analysis_depth: str = Body("standard", description="분석 깊이: basic, standard, deep")
+):
+    """종합 분석을 수행합니다 (기본 분석 + 정성적 분석 + 키워드 추천)."""
+    try:
+        logger.info(f"종합 분석 요청: {target_keyword} ({target_type}, 깊이: {analysis_depth})")
+        
+        # 기본 분석
+        result = await analyze_target(
+            target_keyword=target_keyword,
+            target_type=target_type,
+            additional_context=additional_context,
+            use_gemini=use_gemini
+        )
+        
+        # 정성적 분석
+        try:
+            sentiment_result = await analyze_sentiment(
+                target_keyword=target_keyword,
+                additional_context=additional_context,
+                use_gemini=use_gemini
+            )
+            result["sentiment"] = sentiment_result.get("sentiment", {})
+            
+            context_result = await analyze_context(
+                target_keyword=target_keyword,
+                additional_context=additional_context,
+                use_gemini=use_gemini
+            )
+            result["context"] = context_result.get("context", {})
+            
+            tone_result = await analyze_tone(
+                target_keyword=target_keyword,
+                additional_context=additional_context,
+                use_gemini=use_gemini
+            )
+            result["tone"] = tone_result.get("tone", {})
+        except Exception as e:
+            logger.warning(f"정성적 분석 중 오류 (무시됨): {e}")
+        
+        # 키워드 추천
+        try:
+            recommendations = await recommend_keywords(
+                target_keyword=target_keyword,
+                recommendation_type="all",
+                max_results=15 if analysis_depth == "deep" else 10,
+                additional_context=additional_context,
+                use_gemini=use_gemini
+            )
+            result["recommendations"] = recommendations
+        except Exception as e:
+            logger.warning(f"키워드 추천 중 오류 (무시됨): {e}")
+        
+        return {
+            "success": True,
+            "data": result
+        }
+        
+    except Exception as e:
+        logger.error(f"종합 분석 중 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"종합 분석 실패: {str(e)}"
+        )
+
+
+@router.post("/analysis/compare")
+async def compare_keywords_endpoint(
+    keywords: List[str] = Body(..., description="비교할 키워드 목록"),
+    comparison_aspects: Optional[List[str]] = Body(None, description="비교 관점: sentiment, context, trend, market"),
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+):
+    """여러 키워드를 비교 분석합니다."""
+    try:
+        logger.info(f"키워드 비교 분석 요청: {keywords}")
+        
+        if len(keywords) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="비교하려면 최소 2개 이상의 키워드가 필요합니다."
+            )
+        
+        if len(keywords) > 5:
+            raise HTTPException(
+                status_code=400,
+                detail="한 번에 비교할 수 있는 키워드는 최대 5개입니다."
+            )
+        
+        # 각 키워드에 대한 기본 분석 수행
+        comparison_results = {}
+        for keyword in keywords:
+            result = await analyze_target(
+                target_keyword=keyword,
+                target_type="keyword",
+                use_gemini=use_gemini
+            )
+            
+            # 정성적 분석 포함
+            if not comparison_aspects or "sentiment" in comparison_aspects:
+                try:
+                    sentiment_result = await analyze_sentiment(
+                        target_keyword=keyword,
+                        use_gemini=use_gemini
+                    )
+                    result["sentiment"] = sentiment_result.get("sentiment", {})
+                except Exception as e:
+                    logger.warning(f"감정 분석 중 오류 (무시됨): {e}")
+            
+            comparison_results[keyword] = result
+        
+        # 비교 요약 생성
+        comparison_summary = {
+            "keywords": keywords,
+            "comparison_results": comparison_results,
+            "summary": f"{len(keywords)}개 키워드 비교 분석 완료"
+        }
+        
+        return {
+            "success": True,
+            "data": comparison_summary
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"비교 분석 중 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"비교 분석 실패: {str(e)}"
         )

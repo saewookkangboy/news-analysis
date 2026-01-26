@@ -474,6 +474,23 @@ async def root():
                         </div>
                         
                         <div class="form-group">
+                            <label>분석 기간 설정 *</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div>
+                                    <label for="start_date" style="font-size: 0.75rem; margin-bottom: 4px; display: block;">시작일</label>
+                                    <input type="date" id="start_date" name="start_date" required>
+                                </div>
+                                <div>
+                                    <label for="end_date" style="font-size: 0.75rem; margin-bottom: 4px; display: block;">종료일</label>
+                                    <input type="date" id="end_date" name="end_date" required>
+                                </div>
+                            </div>
+                            <p style="font-size: 0.75rem; color: #666; margin-top: 8px; letter-spacing: -0.36px;">
+                                분석할 기간을 선택하세요. 이 기간 동안의 트렌드와 변화를 중심으로 분석합니다.
+                            </p>
+                        </div>
+                        
+                        <div class="form-group">
                             <label for="additional_context">추가 컨텍스트 (선택사항)</label>
                             <textarea id="additional_context" name="additional_context" 
                                       placeholder="추가로 제공할 컨텍스트 정보를 입력하세요"></textarea>
@@ -512,21 +529,6 @@ async def root():
                         <div class="result-content" id="resultContent"></div>
                     </div>
                     
-                    <div class="links">
-                        <a href="/docs" class="link-card">
-                            <h3>API 문서</h3>
-                            <p>Swagger UI를 통한 API 테스트 및 문서 확인</p>
-                        </a>
-                        <a href="/health" class="link-card">
-                            <h3>헬스 체크</h3>
-                            <p>서비스 상태 확인</p>
-                        </a>
-                        <a href="/openapi.json" class="link-card">
-                            <h3>OpenAPI 스펙</h3>
-                            <p>API 스펙 JSON 다운로드</p>
-                        </a>
-                    </div>
-                    
                     <div class="version">
                         Version 1.0.0 | 뉴스 트렌드 분석 서비스
                     </div>
@@ -535,6 +537,21 @@ async def root():
         </div>
         
         <script>
+            // 기본 날짜 설정 (최근 3개월)
+            window.addEventListener('DOMContentLoaded', function() {
+                const today = new Date();
+                const threeMonthsAgo = new Date();
+                threeMonthsAgo.setMonth(today.getMonth() - 3);
+                
+                const startDateInput = document.getElementById('start_date');
+                const endDateInput = document.getElementById('end_date');
+                
+                if (startDateInput && endDateInput) {
+                    startDateInput.value = threeMonthsAgo.toISOString().split('T')[0];
+                    endDateInput.value = today.toISOString().split('T')[0];
+                }
+            });
+            
             // 클립보드 복사 함수
             function copyToClipboard() {
                 const resultContent = document.getElementById('resultContent');
@@ -575,11 +592,33 @@ async def root():
                 analyzeBtn.disabled = true;
                 
                 // 폼 데이터 수집
+                const startDate = document.getElementById('start_date').value;
+                const endDate = document.getElementById('end_date').value;
+                
+                // 날짜 유효성 검사
+                if (!startDate || !endDate) {
+                    error.textContent = '시작일과 종료일을 모두 입력해주세요.';
+                    error.classList.add('show');
+                    loading.classList.remove('show');
+                    analyzeBtn.disabled = false;
+                    return;
+                }
+                
+                if (new Date(startDate) > new Date(endDate)) {
+                    error.textContent = '시작일은 종료일보다 이전이어야 합니다.';
+                    error.classList.add('show');
+                    loading.classList.remove('show');
+                    analyzeBtn.disabled = false;
+                    return;
+                }
+                
                 const formData = {
                     target_keyword: document.getElementById('target_keyword').value,
                     target_type: document.getElementById('target_type').value,
                     additional_context: document.getElementById('additional_context').value || null,
-                    use_gemini: document.getElementById('use_gemini').checked
+                    use_gemini: document.getElementById('use_gemini').checked,
+                    start_date: startDate,
+                    end_date: endDate
                 };
                 
                 try {
@@ -645,6 +684,7 @@ async def root():
                         resultText = `# 타겟 분석 보고서\\n\\n`;
                         resultText += `**분석 대상**: ${targetKeyword}\\n`;
                         resultText += `**분석 유형**: ${typeNames[targetType] || targetType} 분석\\n`;
+                        resultText += `**분석 기간**: ${formData.start_date} ~ ${formData.end_date}\\n`;
                         resultText += `**분석 일시**: ${new Date().toLocaleString('ko-KR')}\\n\\n`;
                         resultText += `---\\n\\n`;
                         
@@ -672,6 +712,8 @@ async def root():
                                     if (demo.gender) resultText += `- **성별**: ${demo.gender}\\n`;
                                     if (demo.location) resultText += `- **지역**: ${demo.location}\\n`;
                                     if (demo.income_level) resultText += `- **소득 수준**: ${demo.income_level}\\n`;
+                                    if (demo.education_level) resultText += `- **교육 수준**: ${demo.education_level}\\n`;
+                                    if (demo.family_status) resultText += `- **가족 구성**: ${demo.family_status}\\n`;
                                     if (demo.expected_occupations && demo.expected_occupations.length > 0) {
                                         resultText += `- **예상 직업**:\\n`;
                                         demo.expected_occupations.forEach(occupation => {
@@ -687,6 +729,9 @@ async def root():
                                     if (psycho.lifestyle) resultText += `- **라이프스타일**: ${psycho.lifestyle}\\n`;
                                     if (psycho.values) resultText += `- **가치관**: ${psycho.values}\\n`;
                                     if (psycho.interests) resultText += `- **관심사**: ${psycho.interests}\\n`;
+                                    if (psycho.personality_traits) resultText += `- **성격 특성**: ${psycho.personality_traits}\\n`;
+                                    if (psycho.aspirations) resultText += `- **열망 및 목표**: ${psycho.aspirations}\\n`;
+                                    if (psycho.fears_concerns) resultText += `- **우려사항**: ${psycho.fears_concerns}\\n`;
                                     resultText += `\\n`;
                                 }
                                 
@@ -696,6 +741,8 @@ async def root():
                                     if (behavior.purchase_behavior) resultText += `- **구매 행동**: ${behavior.purchase_behavior}\\n`;
                                     if (behavior.media_consumption) resultText += `- **미디어 소비**: ${behavior.media_consumption}\\n`;
                                     if (behavior.online_activity) resultText += `- **온라인 활동**: ${behavior.online_activity}\\n`;
+                                    if (behavior.brand_loyalty) resultText += `- **브랜드 충성도**: ${behavior.brand_loyalty}\\n`;
+                                    if (behavior.decision_making) resultText += `- **의사결정 프로세스**: ${behavior.decision_making}\\n`;
                                     resultText += `\\n`;
                                 }
                                 
@@ -738,10 +785,12 @@ async def root():
                                 if (metrics.estimated_volume) resultText += `- **예상 규모**: ${metrics.estimated_volume}\\n`;
                                 if (metrics.engagement_level) resultText += `- **참여 수준**: ${metrics.engagement_level}\\n`;
                                 if (metrics.growth_potential) resultText += `- **성장 잠재력**: ${metrics.growth_potential}\\n`;
+                                if (metrics.market_value) resultText += `- **시장 가치**: ${metrics.market_value}\\n`;
+                                if (metrics.accessibility) resultText += `- **접근 난이도**: ${metrics.accessibility}\\n`;
                                 resultText += `\\n`;
                             }
-                        } else {
-                            // 키워드 및 경쟁자 분석
+                        } else if (targetType === 'keyword' && analysisData) {
+                            // 키워드 분석 상세 포맷팅
                             if (analysisData.summary) {
                                 resultText += `## 📋 요약\\n\\n${analysisData.summary}\\n\\n`;
                             }
@@ -757,16 +806,81 @@ async def root():
                             if (analysisData.insights) {
                                 resultText += `## 💡 인사이트\\n\\n`;
                                 
-                                if (analysisData.insights.trends && analysisData.insights.trends.length > 0) {
-                                    resultText += `### 트렌드\\n\\n`;
-                                    analysisData.insights.trends.forEach((trend, idx) => {
-                                        resultText += `${idx + 1}. ${trend}\\n`;
-                                    });
+                                if (analysisData.insights.search_intent) {
+                                    resultText += `### 검색 의도 분석\\n\\n`;
+                                    const intent = analysisData.insights.search_intent;
+                                    if (intent.primary_intent) resultText += `- **주요 검색 의도**: ${intent.primary_intent}\\n`;
+                                    if (intent.intent_breakdown) resultText += `- **의도별 분포**: ${intent.intent_breakdown}\\n`;
+                                    if (intent.user_journey_stage) resultText += `- **사용자 여정 단계**: ${intent.user_journey_stage}\\n`;
+                                    if (intent.search_context) resultText += `- **검색 맥락**: ${intent.search_context}\\n`;
                                     resultText += `\\n`;
                                 }
                                 
+                                if (analysisData.insights.competition) {
+                                    resultText += `### 경쟁 환경\\n\\n`;
+                                    const comp = analysisData.insights.competition;
+                                    if (comp.competition_level) resultText += `- **경쟁 수준**: ${comp.competition_level}\\n`;
+                                    if (comp.top_competitors && comp.top_competitors.length > 0) {
+                                        resultText += `- **주요 경쟁 페이지**:\\n`;
+                                        comp.top_competitors.forEach((competitor, idx) => {
+                                            resultText += `  ${idx + 1}. ${competitor}\\n`;
+                                        });
+                                    }
+                                    if (comp.competitor_analysis) resultText += `- **경쟁자 분석**: ${comp.competitor_analysis}\\n`;
+                                    if (comp.market_gap) resultText += `- **시장 공백**: ${comp.market_gap}\\n`;
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (analysisData.insights.trends) {
+                                    resultText += `### 검색 트렌드\\n\\n`;
+                                    const trends = analysisData.insights.trends;
+                                    if (trends.search_volume_trend) resultText += `- **검색량 트렌드**: ${trends.search_volume_trend}\\n`;
+                                    if (trends.seasonal_patterns) resultText += `- **계절성 패턴**: ${trends.seasonal_patterns}\\n`;
+                                    if (trends.trending_topics && trends.trending_topics.length > 0) {
+                                        resultText += `- **관련 트렌딩 토픽**:\\n`;
+                                        trends.trending_topics.forEach((topic, idx) => {
+                                            resultText += `  ${idx + 1}. ${topic}\\n`;
+                                        });
+                                    }
+                                    if (trends.future_outlook) resultText += `- **향후 전망**: ${trends.future_outlook}\\n`;
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (analysisData.insights.related_keywords) {
+                                    resultText += `### 관련 키워드\\n\\n`;
+                                    const related = analysisData.insights.related_keywords;
+                                    if (related.semantic_keywords && related.semantic_keywords.length > 0) {
+                                        resultText += `#### 의미적 관련 키워드\\n\\n`;
+                                        related.semantic_keywords.forEach((kw, idx) => {
+                                            resultText += `${idx + 1}. ${kw}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (related.long_tail_keywords && related.long_tail_keywords.length > 0) {
+                                        resultText += `#### 롱테일 키워드\\n\\n`;
+                                        related.long_tail_keywords.forEach((kw, idx) => {
+                                            resultText += `${idx + 1}. ${kw}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (related.question_keywords && related.question_keywords.length > 0) {
+                                        resultText += `#### 질문형 키워드\\n\\n`;
+                                        related.question_keywords.forEach((kw, idx) => {
+                                            resultText += `${idx + 1}. ${kw}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (related.comparison_keywords && related.comparison_keywords.length > 0) {
+                                        resultText += `#### 비교형 키워드\\n\\n`;
+                                        related.comparison_keywords.forEach((kw, idx) => {
+                                            resultText += `${idx + 1}. ${kw}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                }
+                                
                                 if (analysisData.insights.opportunities && analysisData.insights.opportunities.length > 0) {
-                                    resultText += `### 기회\\n\\n`;
+                                    resultText += `### SEO 기회\\n\\n`;
                                     analysisData.insights.opportunities.forEach((opp, idx) => {
                                         resultText += `${idx + 1}. ${opp}\\n`;
                                     });
@@ -774,7 +888,7 @@ async def root():
                                 }
                                 
                                 if (analysisData.insights.challenges && analysisData.insights.challenges.length > 0) {
-                                    resultText += `### 도전 과제\\n\\n`;
+                                    resultText += `### SEO 도전 과제\\n\\n`;
                                     analysisData.insights.challenges.forEach((challenge, idx) => {
                                         resultText += `${idx + 1}. ${challenge}\\n`;
                                     });
@@ -783,7 +897,7 @@ async def root():
                             }
                             
                             if (analysisData.recommendations && analysisData.recommendations.length > 0) {
-                                resultText += `## 💼 권장사항\\n\\n`;
+                                resultText += `## 💼 키워드 최적화 전략\\n\\n`;
                                 analysisData.recommendations.forEach((rec, idx) => {
                                     resultText += `${idx + 1}. ${rec}\\n`;
                                 });
@@ -793,9 +907,11 @@ async def root():
                             if (analysisData.metrics) {
                                 resultText += `## 📊 지표\\n\\n`;
                                 const metrics = analysisData.metrics;
-                                if (metrics.estimated_volume) resultText += `- **예상 검색량/시장 규모**: ${metrics.estimated_volume}\\n`;
+                                if (metrics.estimated_volume) resultText += `- **예상 검색량**: ${metrics.estimated_volume}\\n`;
                                 if (metrics.competition_level) resultText += `- **경쟁 수준**: ${metrics.competition_level}\\n`;
                                 if (metrics.growth_potential) resultText += `- **성장 잠재력**: ${metrics.growth_potential}\\n`;
+                                if (metrics.difficulty_score) resultText += `- **난이도 점수**: ${metrics.difficulty_score}\\n`;
+                                if (metrics.opportunity_score) resultText += `- **기회 점수**: ${metrics.opportunity_score}\\n`;
                                 resultText += `\\n`;
                             }
                             
@@ -805,6 +921,155 @@ async def root():
                                 analysisData.target_audience.expected_occupations.forEach((occupation, idx) => {
                                     resultText += `${idx + 1}. ${occupation}\\n`;
                                 });
+                                resultText += `\\n`;
+                            }
+                        } else if (targetType === 'competitor' && analysisData) {
+                            // 경쟁자 분석 상세 포맷팅
+                            if (analysisData.summary) {
+                                resultText += `## 📋 요약\\n\\n${analysisData.summary}\\n\\n`;
+                            }
+                            
+                            if (analysisData.key_points && analysisData.key_points.length > 0) {
+                                resultText += `## 🔑 주요 포인트\\n\\n`;
+                                analysisData.key_points.forEach((point, idx) => {
+                                    resultText += `${idx + 1}. ${point}\\n`;
+                                });
+                                resultText += `\\n`;
+                            }
+                            
+                            if (analysisData.insights) {
+                                resultText += `## 💡 인사이트\\n\\n`;
+                                
+                                if (analysisData.insights.competitive_environment) {
+                                    resultText += `### 경쟁 환경\\n\\n`;
+                                    const env = analysisData.insights.competitive_environment;
+                                    if (env.main_competitors && env.main_competitors.length > 0) {
+                                        resultText += `#### 주요 경쟁자\\n\\n`;
+                                        env.main_competitors.forEach((competitor, idx) => {
+                                            resultText += `${idx + 1}. ${competitor}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (env.competition_intensity) resultText += `- **경쟁 강도**: ${env.competition_intensity}\\n`;
+                                    if (env.market_structure) resultText += `- **시장 구조**: ${env.market_structure}\\n`;
+                                    if (env.market_positioning) resultText += `- **시장 포지셔닝**: ${env.market_positioning}\\n`;
+                                    if (env.barriers_to_entry) resultText += `- **진입 장벽**: ${env.barriers_to_entry}\\n`;
+                                    if (env.market_size) resultText += `- **시장 규모**: ${env.market_size}\\n`;
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (analysisData.insights.competitor_analysis) {
+                                    resultText += `### 경쟁자 분석\\n\\n`;
+                                    const comp = analysisData.insights.competitor_analysis;
+                                    if (comp.strengths && comp.strengths.length > 0) {
+                                        resultText += `#### 경쟁자의 강점\\n\\n`;
+                                        comp.strengths.forEach((strength, idx) => {
+                                            resultText += `${idx + 1}. ${strength}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (comp.weaknesses && comp.weaknesses.length > 0) {
+                                        resultText += `#### 경쟁자의 약점\\n\\n`;
+                                        comp.weaknesses.forEach((weakness, idx) => {
+                                            resultText += `${idx + 1}. ${weakness}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (comp.differentiation_points && comp.differentiation_points.length > 0) {
+                                        resultText += `#### 차별화 포인트\\n\\n`;
+                                        comp.differentiation_points.forEach((point, idx) => {
+                                            resultText += `${idx + 1}. ${point}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (comp.market_share) resultText += `- **시장 점유율**: ${comp.market_share}\\n`;
+                                    if (comp.pricing_strategy) resultText += `- **가격 전략**: ${comp.pricing_strategy}\\n`;
+                                    if (comp.marketing_strategy) resultText += `- **마케팅 전략**: ${comp.marketing_strategy}\\n`;
+                                    if (comp.technology_stack) resultText += `- **기술 스택**: ${comp.technology_stack}\\n`;
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (analysisData.insights.trends) {
+                                    resultText += `### 시장 트렌드\\n\\n`;
+                                    const trends = analysisData.insights.trends;
+                                    if (trends.market_trends && trends.market_trends.length > 0) {
+                                        resultText += `#### 시장 트렌드\\n\\n`;
+                                        trends.market_trends.forEach((trend, idx) => {
+                                            resultText += `${idx + 1}. ${trend}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (trends.competitor_movements && trends.competitor_movements.length > 0) {
+                                        resultText += `#### 경쟁자의 최근 움직임\\n\\n`;
+                                        trends.competitor_movements.forEach((movement, idx) => {
+                                            resultText += `${idx + 1}. ${movement}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (trends.industry_changes) resultText += `- **산업 전반의 변화**: ${trends.industry_changes}\\n\\n`;
+                                }
+                                
+                                if (analysisData.insights.opportunities && analysisData.insights.opportunities.length > 0) {
+                                    resultText += `### 경쟁 우위 확보 기회\\n\\n`;
+                                    analysisData.insights.opportunities.forEach((opp, idx) => {
+                                        resultText += `${idx + 1}. ${opp}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (analysisData.insights.challenges && analysisData.insights.challenges.length > 0) {
+                                    resultText += `### 경쟁 도전 과제\\n\\n`;
+                                    analysisData.insights.challenges.forEach((challenge, idx) => {
+                                        resultText += `${idx + 1}. ${challenge}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                            }
+                            
+                            if (analysisData.strategic_recommendations) {
+                                resultText += `## 🎯 전략적 제안\\n\\n`;
+                                const strat = analysisData.strategic_recommendations;
+                                if (strat.competitive_advantages && strat.competitive_advantages.length > 0) {
+                                    resultText += `### 경쟁 우위 확보 방안\\n\\n`;
+                                    strat.competitive_advantages.forEach((adv, idx) => {
+                                        resultText += `${idx + 1}. ${adv}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                if (strat.market_entry_strategy) {
+                                    resultText += `### 시장 진입/확대 전략\\n\\n${strat.market_entry_strategy}\\n\\n`;
+                                }
+                                if (strat.content_differentiation && strat.content_differentiation.length > 0) {
+                                    resultText += `### 콘텐츠 차별화 전략\\n\\n`;
+                                    strat.content_differentiation.forEach((strategy, idx) => {
+                                        resultText += `${idx + 1}. ${strategy}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                if (strat.pricing_strategy) {
+                                    resultText += `### 가격 전략\\n\\n${strat.pricing_strategy}\\n\\n`;
+                                }
+                                if (strat.partnership_opportunities) {
+                                    resultText += `### 파트너십 기회\\n\\n${strat.partnership_opportunities}\\n\\n`;
+                                }
+                            }
+                            
+                            if (analysisData.recommendations && analysisData.recommendations.length > 0) {
+                                resultText += `## 💼 경쟁 전략\\n\\n`;
+                                analysisData.recommendations.forEach((rec, idx) => {
+                                    resultText += `${idx + 1}. ${rec}\\n`;
+                                });
+                                resultText += `\\n`;
+                            }
+                            
+                            if (analysisData.metrics) {
+                                resultText += `## 📊 지표\\n\\n`;
+                                const metrics = analysisData.metrics;
+                                if (metrics.competition_level) resultText += `- **경쟁 수준**: ${metrics.competition_level}\\n`;
+                                if (metrics.market_opportunity) resultText += `- **시장 기회 크기**: ${metrics.market_opportunity}\\n`;
+                                if (metrics.differentiation_potential) resultText += `- **차별화 가능성**: ${metrics.differentiation_potential}\\n`;
+                                if (metrics.risk_level) resultText += `- **위험 수준**: ${metrics.risk_level}\\n`;
+                                if (metrics.success_probability) resultText += `- **성공 확률**: ${metrics.success_probability}\\n`;
                                 resultText += `\\n`;
                             }
                         }
