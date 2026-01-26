@@ -243,14 +243,14 @@ async def _analyze_with_gemini(
         logger.info("🚀 Gemini API 호출 시작")
         logger.info(f"API 키 확인: ✅ (길이: {len(api_key)} 문자)")
         logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}")
-        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash-preview')}")
+        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')}")
         logger.info("=" * 60)
         
         # 프롬프트 생성
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
         
-        # 모델 설정 (기본값: gemini-2.5-flash-preview)
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash-preview')
+        # 모델 설정 (기본값: gemini-1.5-flash)
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
         logger.info(f"Gemini API 클라이언트 초기화 중... (모델: {model_name})")
         
         # 새로운 Gemini API 방식 시도 (from google import genai)
@@ -277,13 +277,14 @@ async def _analyze_with_gemini(
             logger.info("=" * 60)
             loop = asyncio.get_event_loop()
             try:
-                # JSON 응답 강제 시도
+                # JSON 응답 강제 시도 (새로운 API 방식)
+                # config 파라미터를 딕셔너리로 전달
                 response = await loop.run_in_executor(
                     None, 
                     lambda: client.models.generate_content(
                         model=model_name,
                         contents=full_prompt,
-                        generation_config={
+                        config={
                             "response_mime_type": "application/json"
                         }
                     )
@@ -331,16 +332,31 @@ async def _analyze_with_gemini(
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
             loop = asyncio.get_event_loop()
             try:
-                # JSON 응답 강제 시도
-                response = await loop.run_in_executor(
-                    None, 
-                    lambda: model.generate_content(
-                        full_prompt,
-                        generation_config={
-                            "response_mime_type": "application/json"
-                        }
+                # JSON 응답 강제 시도 (기존 API 방식)
+                # google.generativeai에서는 generation_config 사용
+                try:
+                    # GenerationConfig 객체 사용 시도
+                    response = await loop.run_in_executor(
+                        None, 
+                        lambda: model.generate_content(
+                            full_prompt,
+                            generation_config=genai_old.types.GenerationConfig(
+                                response_mime_type="application/json"
+                            )
+                        )
                     )
-                )
+                except (AttributeError, TypeError):
+                    # GenerationConfig가 없거나 지원하지 않는 경우 딕셔너리 사용
+                    response = await loop.run_in_executor(
+                        None, 
+                        lambda: model.generate_content(
+                            full_prompt,
+                            generation_config={
+                                "response_mime_type": "application/json"
+                            }
+                        )
+                    )
+                logger.info("✅ JSON 모드로 Gemini API 응답 수신 완료")
             except Exception as e:
                 logger.warning("=" * 60)
                 logger.warning(f"⚠️ JSON 응답 강제 실패, 일반 모드로 재시도: {type(e).__name__}: {e}")

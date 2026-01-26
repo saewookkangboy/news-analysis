@@ -73,7 +73,7 @@ async def _recommend_with_gemini(
         prompt = _build_recommendation_prompt(
             target_keyword, recommendation_type, max_results, additional_context
         )
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash-exp')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
         
         try:
             from google import genai

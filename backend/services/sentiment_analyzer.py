@@ -142,7 +142,7 @@ async def _analyze_sentiment_with_gemini(
         import os
         
         prompt = _build_sentiment_prompt(target_keyword, additional_context)
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash-exp')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
         
         try:
             from google import genai
@@ -235,7 +235,7 @@ async def _analyze_context_with_gemini(
         import os
         
         prompt = _build_context_prompt(target_keyword, additional_context)
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash-exp')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
         
         try:
             from google import genai
@@ -328,7 +328,7 @@ async def _analyze_tone_with_gemini(
         import os
         
         prompt = _build_tone_prompt(target_keyword, additional_context)
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash-exp')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
         
         try:
             from google import genai
