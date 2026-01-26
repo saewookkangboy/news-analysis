@@ -70,7 +70,7 @@ async def _analyze_with_gemini(
         import os
         
         # 프롬프트 생성
-        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context)
+        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
         
         # 모델 설정 (기본값: gemini-2.5-flash-preview)
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash-preview')
@@ -118,6 +118,9 @@ async def _analyze_with_gemini(
             result_text = response.text if hasattr(response, 'text') else str(response)
         
         # JSON 형식으로 파싱 시도
+        if not result_text:
+            raise ValueError("Gemini API 응답이 비어있습니다.")
+        
         try:
             result = json.loads(result_text)
         except json.JSONDecodeError:
@@ -153,7 +156,7 @@ async def _analyze_with_openai(
         client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         
         # 프롬프트 생성
-        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context)
+        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
         
         # API 호출
         response = await client.chat.completions.create(
@@ -172,7 +175,11 @@ async def _analyze_with_openai(
         
         # JSON 형식으로 파싱 시도
         try:
-            result = json.loads(result_text)
+            # result_text가 문자열인지 확인
+            if isinstance(result_text, str):
+                result = json.loads(result_text)
+            else:
+                result = {"analysis": str(result_text), "target_keyword": target_keyword, "target_type": target_type}
         except json.JSONDecodeError:
             # JSON이 아니면 텍스트로 반환
             result = {
@@ -251,20 +258,30 @@ def _build_analysis_prompt(
     
     # 기간 정보 추가
     period_info = ""
+    period_instruction = ""
     if start_date and end_date:
         period_info = f"""
 **분석 기간**: {start_date} ~ {end_date}
-이 기간 동안의 트렌드, 변화, 패턴을 중심으로 분석해주세요.
+"""
+        period_instruction = f"""
+**중요**: 반드시 {start_date}부터 {end_date}까지의 기간 동안의 데이터, 트렌드, 변화, 패턴을 중심으로 분석해주세요. 
+이 기간 동안의 시계열 변화, 계절성, 이벤트, 뉴스, 시장 동향 등을 반드시 포함하여 매우 상세하게 분석해야 합니다.
 """
     elif start_date:
         period_info = f"""
 **시작일**: {start_date}
-이 날짜 이후의 트렌드와 변화를 중심으로 분석해주세요.
+"""
+        period_instruction = f"""
+**중요**: 반드시 {start_date} 이후의 트렌드와 변화를 중심으로 분석해주세요. 
+이 날짜 이후의 시계열 변화, 뉴스, 시장 동향 등을 반드시 포함하여 매우 상세하게 분석해야 합니다.
 """
     elif end_date:
         period_info = f"""
 **종료일**: {end_date}
-이 날짜까지의 데이터를 기반으로 분석해주세요.
+"""
+        period_instruction = f"""
+**중요**: 반드시 {end_date}까지의 데이터를 기반으로 분석해주세요. 
+이 날짜까지의 시계열 변화, 뉴스, 시장 동향 등을 반드시 포함하여 매우 상세하게 분석해야 합니다.
 """
     
     # 오디언스 분석에 특화된 프롬프트
@@ -274,6 +291,7 @@ def _build_analysis_prompt(
 
 **분석 대상**: {target_keyword}
 {period_info}
+{period_instruction}
 """
         if additional_context:
             prompt += f"""
@@ -282,7 +300,8 @@ def _build_analysis_prompt(
 
 """
         prompt += """
-다음 항목들을 매우 상세하게 분석하여 JSON 형식으로 응답해주세요. 각 항목은 구체적이고 실용적인 정보를 포함해야 합니다:
+다음 항목들을 매우 상세하게 분석하여 JSON 형식으로 응답해주세요. 각 항목은 구체적이고 실용적인 정보를 포함해야 합니다. 
+특히 지정된 기간 동안의 변화, 트렌드, 패턴을 반드시 포함하여 분석해주세요:
 
 {
   "summary": "오디언스에 대한 종합적인 요약 (3-5문단, 인구통계, 심리적 특성, 행동 패턴, 니즈, 기회 등을 포괄적으로 설명)",
@@ -318,7 +337,7 @@ def _build_analysis_prompt(
       "brand_loyalty": "브랜드 충성도 (브랜드 선호도, 전환 가능성 등)",
       "decision_making": "의사결정 프로세스 (구매 결정에 영향을 미치는 요소, 결정 시간 등)"
     },
-    "trends": ["최근 3개월 트렌드 1 (상세 설명)", "최근 3개월 트렌드 2", "최근 3개월 트렌드 3", "최근 3개월 트렌드 4", "최근 3개월 트렌드 5"],
+    "trends": ["지정된 기간 동안의 트렌드 1 (상세 설명 및 시계열 변화 포함)", "트렌드 2", "트렌드 3", "트렌드 4", "트렌드 5"],
     "opportunities": ["마케팅 기회 1 (구체적 전략 포함)", "마케팅 기회 2", "마케팅 기회 3", "마케팅 기회 4", "마케팅 기회 5"],
     "challenges": ["마케팅 도전 과제 1 (해결 방안 포함)", "마케팅 도전 과제 2", "마케팅 도전 과제 3", "마케팅 도전 과제 4"]
   },
@@ -345,6 +364,7 @@ def _build_analysis_prompt(
 
 **분석 대상 키워드**: {target_keyword}
 {period_info}
+{period_instruction}
 """
         if additional_context:
             prompt += f"""
@@ -353,7 +373,8 @@ def _build_analysis_prompt(
 
 """
         prompt += """
-다음 항목들을 매우 상세하게 분석하여 JSON 형식으로 응답해주세요. 각 항목은 구체적이고 실용적인 정보를 포함해야 합니다:
+다음 항목들을 매우 상세하게 분석하여 JSON 형식으로 응답해주세요. 각 항목은 구체적이고 실용적인 정보를 포함해야 합니다.
+특히 지정된 기간 동안의 검색량 변화, 트렌드, 계절성, 이벤트 등을 반드시 포함하여 분석해주세요:
 
 {
   "summary": "키워드에 대한 종합적인 요약 (3-5문단, 검색 의도, 경쟁 환경, 트렌드, 기회 등을 포괄적으로 설명)",
@@ -378,10 +399,11 @@ def _build_analysis_prompt(
       "market_gap": "시장 공백 및 차별화 기회"
     },
     "trends": {
-      "search_volume_trend": "검색량 트렌드 (증가/감소/안정) 및 예상 검색량 범위",
-      "seasonal_patterns": "계절성 패턴 (특정 시기에 검색량이 증가하는지)",
-      "trending_topics": ["관련 트렌딩 토픽 1", "관련 트렌딩 토픽 2", "관련 트렌딩 토픽 3", "관련 트렌딩 토픽 4", "관련 트렌딩 토픽 5"],
-      "future_outlook": "향후 전망 (향후 6개월-1년간의 예상 트렌드)"
+      "search_volume_trend": "지정된 기간 동안의 검색량 트렌드 (증가/감소/안정) 및 구체적 변화율, 예상 검색량 범위",
+      "seasonal_patterns": "지정된 기간 동안의 계절성 패턴 (특정 시기에 검색량이 증가/감소하는지, 구체적 날짜 및 이유)",
+      "trending_topics": ["지정된 기간 동안의 관련 트렌딩 토픽 1 (발생 시기 및 이유 포함)", "트렌딩 토픽 2", "트렌딩 토픽 3", "트렌딩 토픽 4", "트렌딩 토픽 5"],
+      "period_analysis": "지정된 기간 동안의 검색량 변화 상세 분석 (월별/주별 변화, 피크 시기, 하락 시기 등)",
+      "future_outlook": "향후 전망 (지정된 기간의 패턴을 기반으로 한 향후 6개월-1년간의 예상 트렌드)"
     },
     "related_keywords": {
       "semantic_keywords": ["의미적으로 관련된 키워드 1", "의미적으로 관련된 키워드 2", "의미적으로 관련된 키워드 3", "의미적으로 관련된 키워드 4", "의미적으로 관련된 키워드 5"],
@@ -418,6 +440,7 @@ def _build_analysis_prompt(
 
 **분석 대상**: {target_keyword}
 {period_info}
+{period_instruction}
 """
         if additional_context:
             prompt += f"""
@@ -426,7 +449,8 @@ def _build_analysis_prompt(
 
 """
         prompt += """
-다음 항목들을 매우 상세하게 분석하여 JSON 형식으로 응답해주세요. 각 항목은 구체적이고 실용적인 정보를 포함해야 합니다:
+다음 항목들을 매우 상세하게 분석하여 JSON 형식으로 응답해주세요. 각 항목은 구체적이고 실용적인 정보를 포함해야 합니다.
+특히 지정된 기간 동안의 시장 변화, 경쟁자 움직임, 시장 점유율 변화 등을 반드시 포함하여 분석해주세요:
 
 {
   "summary": "경쟁 환경에 대한 종합적인 요약 (3-5문단, 주요 경쟁자, 시장 구조, 경쟁 강도, 기회 등을 포괄적으로 설명)",
@@ -456,9 +480,10 @@ def _build_analysis_prompt(
       "technology_stack": "경쟁자의 기술 스택 및 혁신 수준"
     },
     "trends": {
-      "market_trends": ["시장 트렌드 1 (상세 설명)", "시장 트렌드 2", "시장 트렌드 3", "시장 트렌드 4", "시장 트렌드 5"],
-      "competitor_movements": ["경쟁자의 최근 움직임 1", "경쟁자의 최근 움직임 2", "경쟁자의 최근 움직임 3"],
-      "industry_changes": "산업 전반의 변화 및 영향"
+      "market_trends": ["지정된 기간 동안의 시장 트렌드 1 (상세 설명 및 시계열 변화 포함)", "시장 트렌드 2", "시장 트렌드 3", "시장 트렌드 4", "시장 트렌드 5"],
+      "competitor_movements": ["지정된 기간 동안의 경쟁자 움직임 1 (구체적 시기 및 내용)", "경쟁자 움직임 2", "경쟁자 움직임 3"],
+      "industry_changes": "지정된 기간 동안의 산업 전반의 변화 및 영향 (구체적 시기 및 사건 포함)",
+      "period_analysis": "지정된 기간 동안의 시장 점유율, 경쟁 강도, 진입/퇴출 등의 변화 상세 분석"
     },
     "opportunities": ["경쟁 우위 확보 기회 1 (구체적 실행 방안 포함)", "기회 2", "기회 3", "기회 4", "기회 5"],
     "challenges": ["경쟁 도전 과제 1 (해결 방안 포함)", "도전 과제 2", "도전 과제 3", "도전 과제 4"]
