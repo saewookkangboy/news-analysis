@@ -21,33 +21,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# FastAPI 앱 import
 try:
-    # FastAPI 앱 import
     from backend.main import app
     logger.info("FastAPI app imported successfully")
-    
-    # Vercel은 handler를 export해야 함
-    # Mangum을 사용하여 ASGI 앱을 AWS Lambda 핸들러로 변환
-    try:
-        from mangum import Mangum
-        handler = Mangum(app, lifespan="off")
-        logger.info("Mangum handler created")
-    except ImportError:
-        # Mangum이 없으면 직접 app을 export (Vercel이 자동으로 처리)
-        handler = app
-        logger.info("Using FastAPI app directly (Mangum not available)")
-    
 except Exception as e:
     logger.error(f"Failed to import app: {e}", exc_info=True)
     # 에러 발생 시에도 기본 handler 제공
     from fastapi import FastAPI
-    error_app = FastAPI()
+    app = FastAPI()
     
-    @error_app.get("/")
+    @app.get("/")
     async def error_root():
         return {"error": "Application failed to start", "message": str(e)}
-    
-    handler = error_app
+
+# Mangum을 사용하여 ASGI 앱을 AWS Lambda 핸들러로 변환
+# Vercel은 Mangum handler를 필요로 합니다 (requirements.txt에 mangum 포함 필수)
+try:
+    from mangum import Mangum
+    # handler를 Mangum 인스턴스로 정의 (Vercel이 기대하는 형식)
+    handler = Mangum(app, lifespan="off")
+    logger.info("Mangum handler created successfully")
+except ImportError as e:
+    # 로컬 개발 환경에서는 Mangum이 없을 수 있음
+    # 하지만 Vercel 배포 시에는 requirements.txt에 mangum이 포함되어 있어야 함
+    logger.error(f"Mangum import failed: {e}")
+    logger.error("Vercel 배포 시 requirements.txt에 mangum==0.17.0이 포함되어 있는지 확인하세요")
+    # Fallback: app을 직접 사용 (Vercel에서는 작동하지 않을 수 있음)
+    handler = app
 
 # Vercel에서 인식할 수 있도록 handler export
-# handler 변수는 Vercel이 자동으로 찾습니다
+# handler는 모듈 레벨 변수로 export됩니다

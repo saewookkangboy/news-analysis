@@ -1688,48 +1688,48 @@ async def root():
                                     recs.semantic_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
                                         const score = kw.score ? ' (점수: ' + kw.score + ')' : '';
-                                        resultText += `${idx + 1}. ${keyword}${score}\\n`;
+                                        resultText += (idx + 1) + '. ' + keyword + score + '\\n';
                                     });
-                                    resultText += `\\n`;
+                                    resultText += '\\n';
                                 }
                                 
                                 if (recs.co_occurring_keywords && Array.isArray(recs.co_occurring_keywords) && recs.co_occurring_keywords.length > 0) {
-                                    resultText += `### 공기 키워드\\n\\n`;
+                                    resultText += '### 공기 키워드\\n\\n';
                                     recs.co_occurring_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                        resultText += `${idx + 1}. ${keyword}\\n`;
+                                        resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
-                                    resultText += `\\n`;
+                                    resultText += '\\n';
                                 }
                                 
                                 if (recs.long_tail_keywords && Array.isArray(recs.long_tail_keywords) && recs.long_tail_keywords.length > 0) {
-                                    resultText += `### 롱테일 키워드\\n\\n`;
+                                    resultText += '### 롱테일 키워드\\n\\n';
                                     recs.long_tail_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                        resultText += `${idx + 1}. ${keyword}\\n`;
+                                        resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
-                                    resultText += `\\n`;
+                                    resultText += '\\n';
                                 }
                                 
                                 if (recs.trending_keywords && Array.isArray(recs.trending_keywords) && recs.trending_keywords.length > 0) {
-                                    resultText += `### 트렌딩 키워드\\n\\n`;
+                                    resultText += '### 트렌딩 키워드\\n\\n';
                                     recs.trending_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                        resultText += `${idx + 1}. ${keyword}\\n`;
+                                        resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
-                                    resultText += `\\n`;
+                                    resultText += '\\n';
                                 }
                                 
                                 // recommendations 객체의 다른 필드들도 동적으로 표시
                                 Object.keys(recs).forEach(key => {
                                     if (!['semantic_keywords', 'co_occurring_keywords', 'long_tail_keywords', 'trending_keywords'].includes(key) && recs[key]) {
                                         if (Array.isArray(recs[key]) && recs[key].length > 0) {
-                                            resultText += `### ${key}\\n\\n`;
+                                            resultText += '### ' + key + '\\n\\n';
                                             recs[key].forEach((item, idx) => {
                                                 const keyword = typeof item === 'string' ? item : (item.keyword || item);
-                                                resultText += `${idx + 1}. ${keyword}\\n`;
+                                                resultText += (idx + 1) + '. ' + keyword + '\\n';
                                             });
-                                            resultText += `\\n`;
+                                            resultText += '\\n';
                                         }
                                     }
                                 });
