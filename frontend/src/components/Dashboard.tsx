@@ -190,9 +190,11 @@ const Dashboard: React.FC = React.memo(() => {
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
         <div className="space-y-6 max-w-7xl mx-auto">
           {/* 페이지 헤더 */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold text-black mb-1">분석 결과</h1>
-            <p className="text-sm text-black">
+          <div className="mb-6 animate-fade-in">
+            <h1 className="text-2xl font-semibold text-black mb-1 tracking-tight" style={{ letterSpacing: '-1.04px' }}>
+              분석 결과
+            </h1>
+            <p className="text-sm text-black" style={{ letterSpacing: '-0.42px' }}>
               {categoryTitle} 고객 여정과 퍼널 분석을 통한 실시간 인사이트
             </p>
           </div>

@@ -3,6 +3,8 @@
 ## 디자인 컨셉
 **블랙/화이트 미니멀 테마** - 깔끔하고 전문적인 단색 디자인
 
+> Marketing Website Template 스타일 반영 (basehub-ai/marketing-website-template)
+
 ## 레이아웃 구조
 
 ### 전체 구조
@@ -36,12 +38,15 @@
 
 ## 컴포넌트 스타일 가이드
 
-### 1. 네비게이션 바
-- 배경: 화이트
+### 1. 네비게이션 바 (개선됨)
+- 배경: 화이트 (backdrop-blur 적용)
 - 테두리: 블랙 (하단)
-- 활성 메뉴: 블랙 배경, 화이트 텍스트
+- 높이: 64px (h-16)
+- Sticky: `sticky top-0 z-50`
+- 활성 메뉴: 블랙 배경, 화이트 텍스트, `scale-105`
 - 비활성 메뉴: 화이트 배경, 블랙 텍스트
-- Hover: 블랙 배경, 화이트 텍스트
+- Hover: 블랙 배경, 화이트 텍스트, `scale-105`
+- 간격: `space-x-2` (8px)
 
 ### 2. 분석 설정 패널 (좌측)
 - 너비: 320px (lg), 384px (xl)
@@ -55,16 +60,20 @@
 - 패딩: 24px (lg), 32px (xl)
 - 최대 너비: 1280px (max-w-7xl)
 
-### 4. 카드
+### 4. 카드 (개선됨)
 - 배경: 화이트
 - 테두리: 블랙 (1px)
 - 패딩: 20px (p-5) 또는 24px (p-6)
 - 모서리: 둥근 모서리 (rounded-lg)
+- Hover: `transform: translateY(-2px)`
+- Letter-spacing: -0.48px
 
-### 5. 버튼
+### 5. 버튼 (개선됨)
 - Primary: 블랙 배경, 화이트 텍스트
 - Secondary: 화이트 배경, 블랙 텍스트, 블랙 테두리
-- Hover: 반전 효과 또는 다크 그레이
+- Hover: `transform: translateY(-1px)` (살짝 위로 이동)
+- Letter-spacing: -0.42px
+- 선택된 상태: `scale-105`
 
 ### 6. 테이블
 - 헤더: 화이트 배경, 블랙 텍스트
@@ -82,18 +91,23 @@
 - 기본: 'Inter', 시스템 폰트
 - 코드: 'Courier New', monospace
 
-### 크기
-- 헤딩 1: `text-2xl` (24px)
-- 헤딩 2: `text-lg` (18px)
-- 헤딩 3: `text-base` (16px)
-- 본문: `text-sm` (14px)
-- 작은 텍스트: `text-xs` (12px)
+### 크기 및 Letter Spacing (Marketing Template 스타일)
+- 헤딩 1: `text-2xl` (24px), letter-spacing: -1.04px, line-height: 2rem
+- 헤딩 2: `text-lg` (18px), letter-spacing: -0.72px, line-height: 1.75rem
+- 헤딩 3: `text-base` (16px), letter-spacing: -0.48px, line-height: 1.6
+- 본문: `text-sm` (14px), letter-spacing: -0.42px, line-height: 1.25rem
+- 작은 텍스트: `text-xs` (12px), letter-spacing: -0.36px, line-height: 1rem
 
 ### 굵기
 - Bold: `font-bold` (700)
 - Semibold: `font-semibold` (600)
 - Medium: `font-medium` (500)
 - Regular: 기본 (400)
+
+### 특징
+- 모든 텍스트에 음수 letter-spacing 적용 (더 모던한 느낌)
+- 최적화된 line-height로 가독성 향상
+- tracking-tight 클래스 사용 가능
 
 ## 간격 시스템
 
@@ -109,15 +123,34 @@
 - 작은 간격: 8px (gap-2)
 - 큰 간격: 32px (gap-8)
 
-## 애니메이션
+## 애니메이션 (Marketing Template 스타일)
 
 ### 전환 효과
 - 기본: `transition-colors duration-200`
 - 전체: `transition-all duration-200`
+- Hover 시 transform: translateY(-1px) 적용
 
-### 애니메이션
-- Fade In: 0.3s ease-in-out
-- Slide Up: 0.3s ease-out
+### 고급 애니메이션
+- **Fade In**: 0.2s ease
+- **Fade Out**: 0.2s ease
+- **Slide Up**: 0.3s cubic-bezier(0.87, 0, 0.13, 1)
+- **Slide Down**: 0.3s cubic-bezier(0.87, 0, 0.13, 1)
+- **Enter From Right**: 0.25s ease
+- **Enter From Left**: 0.25s ease
+- **Scale In**: 0.2s ease (rotateX 효과 포함)
+- **Scale Out**: 0.2s ease
+
+### 사용 예시
+```css
+.animate-fade-in      /* 페이드 인 */
+.enter-from-right     /* 오른쪽에서 진입 */
+.scale-in            /* 스케일 인 (3D 효과) */
+```
+
+### 인터랙션 효과
+- 버튼 Hover: `transform: translateY(-1px)`
+- 카드 Hover: `transform: translateY(-2px)`
+- 선택된 항목: `scale-105`
 
 ## 반응형 디자인
 

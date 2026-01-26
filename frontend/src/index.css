@@ -2,22 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 폰트 Preconnect - 성능 최적화 */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@100;200;300;400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Nanum+Gothic&family=Noto+Sans+KR:wght@100..900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 /* ============================================
    최종 디자인 템플릿 - 블랙/화이트 미니멀 테마
+   Marketing Website Template 스타일 반영
    ============================================ */
 
-/* 기본 스타일 */
+/* 기본 스타일 - 한글 폰트 우선 적용 */
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'IBM Plex Sans KR', 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #ffffff;
   color: #000000;
+  letter-spacing: -0.48px;
+  line-height: 1.6;
 }
 
 code {
@@ -67,15 +72,22 @@ code {
   background-color: #333333;
 }
 
-/* 애니메이션 */
+/* 고급 애니메이션 - Marketing Template 스타일 */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(-10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 
@@ -90,51 +102,140 @@ code {
   }
 }
 
+@keyframes slideDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes enterFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(200px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes enterFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-200px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: rotateX(-10deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: rotateX(0deg) scale(1);
+  }
+}
+
+@keyframes scaleOut {
+  from {
+    opacity: 1;
+    transform: rotateX(0deg) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: rotateX(-10deg) scale(0.95);
+  }
+}
+
 .fade-in {
   animation: fadeIn 0.5s ease-in-out;
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-in-out;
+  animation: fadeIn 0.2s ease;
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.2s ease;
 }
 
 .slide-up {
-  animation: slideUp 0.3s ease-out;
+  animation: slideUp 0.3s cubic-bezier(0.87, 0, 0.13, 1);
 }
 
-/* 카드 스타일 - 블랙/화이트 테마 */
+.slide-down {
+  animation: slideDown 0.3s cubic-bezier(0.87, 0, 0.13, 1);
+}
+
+.enter-from-right {
+  animation: enterFromRight 0.25s ease;
+}
+
+.enter-from-left {
+  animation: enterFromLeft 0.25s ease;
+}
+
+.scale-in {
+  animation: scaleIn 0.2s ease;
+}
+
+.scale-out {
+  animation: scaleOut 0.2s ease;
+}
+
+/* 카드 스타일 - 블랙/화이트 테마 (Marketing Template 스타일) */
 .dashboard-card {
   @apply bg-white rounded-lg border border-black p-6 transition-all duration-200;
+  letter-spacing: -0.48px;
 }
 
 .dashboard-card:hover {
   @apply border-black;
+  transform: translateY(-2px);
 }
 
-/* 메트릭 카드 */
+/* 메트릭 카드 - 개선된 타이포그래피 */
 .metric-card {
   @apply dashboard-card text-center;
 }
 
 .metric-value {
   @apply text-3xl font-bold text-black mb-2;
+  letter-spacing: -1.04px;
+  line-height: 2rem;
 }
 
 .metric-label {
   @apply text-sm font-medium text-black;
+  letter-spacing: -0.42px;
+  line-height: 1.25rem;
 }
 
 .metric-change {
   @apply text-xs font-medium text-black;
+  letter-spacing: -0.36px;
+  line-height: 1rem;
 }
 
-/* 차트 컨테이너 */
+/* 차트 컨테이너 - 개선된 스타일 */
 .chart-container {
   @apply dashboard-card;
 }
 
 .chart-title {
   @apply text-lg font-semibold text-black mb-4;
+  letter-spacing: -0.72px;
+  line-height: 1.75rem;
 }
 
 .chart-wrapper {
@@ -183,17 +284,29 @@ code {
   @apply overflow-x-auto;
 }
 
-/* 버튼 스타일 */
+/* 버튼 스타일 - Marketing Template 스타일 */
 .btn {
-  @apply inline-flex items-center px-4 py-2 border text-sm font-medium rounded-lg focus:outline-none transition-colors duration-200;
+  @apply inline-flex items-center px-4 py-2 border text-sm font-medium rounded-lg focus:outline-none transition-all duration-200;
+  letter-spacing: -0.42px;
+  line-height: 1.25rem;
 }
 
 .btn-primary {
   @apply btn bg-black text-white border-black hover:bg-gray-900;
+  transform: translateY(0);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
   @apply btn bg-white text-black border-black hover:bg-black hover:text-white;
+  transform: translateY(0);
+}
+
+.btn-secondary:hover {
+  transform: translateY(-1px);
 }
 
 .btn-success {
@@ -204,17 +317,28 @@ code {
   @apply btn bg-black text-white border-black hover:bg-gray-900;
 }
 
-/* 폼 스타일 */
+/* 폼 스타일 - 개선된 타이포그래피 */
 .form-input {
   @apply block w-full px-3 py-2 border border-black rounded-md bg-white text-black placeholder-gray-500 focus:outline-none focus:border-black sm:text-sm;
+  letter-spacing: -0.42px;
+  line-height: 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .form-label {
   @apply block text-sm font-medium text-black mb-1;
+  letter-spacing: -0.42px;
+  line-height: 1.25rem;
 }
 
 .form-error {
   @apply mt-1 text-sm text-black;
+  letter-spacing: -0.36px;
 }
 
 /* 로딩 스피너 */
@@ -253,4 +377,114 @@ code {
 /* 툴팁 스타일 */
 .tooltip {
   @apply absolute z-10 px-3 py-2 text-sm text-white bg-black rounded-lg;
+}
+
+/* ============================================
+   한글 폰트 클래스 - IBM Plex Sans KR
+   ============================================ */
+.ibm-plex-sans-kr-thin {
+  font-family: "IBM Plex Sans KR", sans-serif;
+  font-weight: 100;
+  font-style: normal;
+}
+
+.ibm-plex-sans-kr-extralight {
+  font-family: "IBM Plex Sans KR", sans-serif;
+  font-weight: 200;
+  font-style: normal;
+}
+
+.ibm-plex-sans-kr-light {
+  font-family: "IBM Plex Sans KR", sans-serif;
+  font-weight: 300;
+  font-style: normal;
+}
+
+.ibm-plex-sans-kr-regular {
+  font-family: "IBM Plex Sans KR", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.ibm-plex-sans-kr-medium {
+  font-family: "IBM Plex Sans KR", sans-serif;
+  font-weight: 500;
+  font-style: normal;
+}
+
+.ibm-plex-sans-kr-semibold {
+  font-family: "IBM Plex Sans KR", sans-serif;
+  font-weight: 600;
+  font-style: normal;
+}
+
+.ibm-plex-sans-kr-bold {
+  font-family: "IBM Plex Sans KR", sans-serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+/* ============================================
+   한글 폰트 클래스 - Noto Sans KR
+   ============================================ */
+.noto-sans-kr {
+  font-family: "Noto Sans KR", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-thin {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 100;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-light {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 300;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-regular {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 400;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-medium {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 500;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-semibold {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 600;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-bold {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 700;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-extrabold {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 800;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.noto-sans-kr-black {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 900;
+  font-optical-sizing: auto;
+  font-style: normal;
 }

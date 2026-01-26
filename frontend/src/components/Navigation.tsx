@@ -20,30 +20,31 @@ const Navigation: React.FC = () => {
   ];
 
   return (
-    <nav className="bg-white border-b border-black flex-shrink-0">
+    <nav className="bg-white border-b border-black flex-shrink-0 sticky top-0 z-50 backdrop-blur-sm bg-white/95">
       <div className="px-6">
-        <div className="flex justify-between items-center h-14">
+        <div className="flex justify-between items-center h-16">
           {/* 로고 */}
           <div className="flex items-center">
-            <h1 className="text-lg font-semibold text-black">
+            <h1 className="text-xl font-semibold text-black tracking-tight">
               고객 행동 분석
             </h1>
           </div>
 
           {/* 네비게이션 메뉴 */}
           <div className="hidden md:block">
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center space-x-2">
               {navigation.map((item) => {
                 const isActive = location.pathname === item.href;
                 return (
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                       isActive
-                        ? 'bg-black text-white'
-                        : 'text-black hover:bg-black hover:text-white'
+                        ? 'bg-black text-white scale-105'
+                        : 'text-black hover:bg-black hover:text-white hover:scale-105'
                     }`}
+                    style={{ letterSpacing: '-0.42px' }}
                   >
                     <item.icon className="h-4 w-4 mr-2" />
                     {item.name}
