@@ -780,9 +780,22 @@ async def root():
                         // JSON 데이터 파싱 - 여러 구조 지원
                         console.log('받은 데이터 구조:', Object.keys(data.data || {}));
                         
-                        // 1. data.data.analysis가 있는 경우 (기본 분석 모드)
-                        if (data.data && data.data.analysis) {
-                            if (typeof data.data.analysis === 'string') {
+                        // 우선순위: executive_summary, key_findings, detailed_analysis가 있으면 data.data를 직접 사용
+                        // (이것이 가장 완전한 데이터 구조)
+                        if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+                            // MECE 구조의 완전한 분석 데이터가 있는 경우 (우선 사용)
+                            if (data.data.executive_summary || data.data.key_findings || data.data.detailed_analysis || data.data.strategic_recommendations) {
+                                analysisData = data.data;
+                                console.log('MECE 구조 데이터 사용:', Object.keys(analysisData));
+                            }
+                            // analysis 필드가 있고 그것이 객체인 경우
+                            else if (data.data.analysis && typeof data.data.analysis === 'object') {
+                                // analysis 필드와 data.data의 다른 필드들을 병합
+                                analysisData = { ...data.data, ...data.data.analysis };
+                                console.log('analysis 필드 병합 사용:', Object.keys(analysisData));
+                            }
+                            // analysis 필드가 문자열인 경우 (JSON 파싱 필요)
+                            else if (data.data.analysis && typeof data.data.analysis === 'string') {
                                 try {
                                     let cleanAnalysis = data.data.analysis;
                                     // 마크다운 코드 블록 제거
@@ -798,46 +811,34 @@ async def root():
                                         }
                                     }
                                     cleanAnalysis = cleanAnalysis.replace(/```/g, '').trim();
-                                    analysisData = JSON.parse(cleanAnalysis);
+                                    const parsedAnalysis = JSON.parse(cleanAnalysis);
+                                    // 파싱된 analysis와 data.data의 다른 필드들을 병합
+                                    analysisData = { ...data.data, ...parsedAnalysis };
+                                    console.log('JSON 파싱 후 병합 사용:', Object.keys(analysisData));
                                 } catch (parseError) {
-                                    console.warn('JSON 파싱 실패:', parseError);
-                                    analysisData = { analysis: data.data.analysis };
+                                    console.warn('JSON 파싱 실패, data.data 전체 사용:', parseError);
+                                    analysisData = data.data;
                                 }
-                            } else {
-                                analysisData = data.data.analysis;
                             }
-                        } 
-                        // 2. data.data가 직접 분석 결과인 경우 (AI API 모드)
-                        else if (data.data) {
-                            // data.data가 이미 분석 결과 객체인 경우
-                            if (typeof data.data === 'object' && !Array.isArray(data.data)) {
-                                // executive_summary, key_findings 등이 있으면 직접 사용
-                                if (data.data.executive_summary || data.data.key_findings || data.data.detailed_analysis) {
-                                    analysisData = data.data;
-                                } 
-                                // analysis 필드가 있으면 그것을 사용
-                                else if (data.data.analysis) {
-                                    analysisData = data.data.analysis;
-                                }
-                                // 그 외에는 전체를 사용
-                                else {
-                                    analysisData = data.data;
-                                }
-                            } else {
+                            // 그 외에는 data.data 전체 사용
+                            else {
                                 analysisData = data.data;
+                                console.log('data.data 전체 사용:', Object.keys(analysisData));
                             }
-                        } 
-                        // 3. data가 직접 분석 결과인 경우
+                        }
+                        // data가 직접 분석 결과인 경우
                         else if (data.executive_summary || data.key_findings || data.detailed_analysis) {
                             analysisData = data;
+                            console.log('data 직접 사용:', Object.keys(analysisData));
                         }
-                        // 4. 그 외의 경우
+                        // 그 외의 경우
                         else {
                             console.warn('알 수 없는 데이터 구조:', data);
                             analysisData = data.data || data || {};
                         }
                         
-                        console.log('파싱된 analysisData 구조:', Object.keys(analysisData || {}));
+                        console.log('파싱된 analysisData 최종 구조:', Object.keys(analysisData || {}));
+                        console.log('analysisData 상세:', JSON.stringify(analysisData, null, 2));
                         
                         // Markdown 형식으로 변환
                         const targetKeyword = formData.target_keyword;
@@ -1400,6 +1401,126 @@ async def root():
                             }
                         }
                         
+                        // 추가 분석 데이터 표시 (sentiment, context, tone, recommendations, analysis_sources)
+                        // 이 필드들은 data.data에 직접 있을 수 있음
+                        const additionalData = data.data || {};
+                        
+                        // Sentiment 분석
+                        if (additionalData.sentiment && typeof additionalData.sentiment === 'object') {
+                            resultText += `## 😊 감정 분석 (Sentiment Analysis)\\n\\n`;
+                            const sentiment = additionalData.sentiment;
+                            if (sentiment.overall_sentiment) resultText += `- **전체 감정**: ${sentiment.overall_sentiment}\\n`;
+                            if (sentiment.sentiment_score !== undefined) resultText += `- **감정 점수**: ${sentiment.sentiment_score}\\n`;
+                            if (sentiment.positive_aspects && Array.isArray(sentiment.positive_aspects) && sentiment.positive_aspects.length > 0) {
+                                resultText += `- **긍정적 측면**:\\n`;
+                                sentiment.positive_aspects.forEach((aspect, idx) => {
+                                    resultText += `  ${idx + 1}. ${aspect}\\n`;
+                                });
+                            }
+                            if (sentiment.negative_aspects && Array.isArray(sentiment.negative_aspects) && sentiment.negative_aspects.length > 0) {
+                                resultText += `- **부정적 측면**:\\n`;
+                                sentiment.negative_aspects.forEach((aspect, idx) => {
+                                    resultText += `  ${idx + 1}. ${aspect}\\n`;
+                                });
+                            }
+                            if (sentiment.emotional_tone) resultText += `- **감정적 톤**: ${sentiment.emotional_tone}\\n`;
+                            resultText += `\\n`;
+                        }
+                        
+                        // Context 분석
+                        if (additionalData.context && typeof additionalData.context === 'object') {
+                            resultText += `## 🌐 맥락 분석 (Context Analysis)\\n\\n`;
+                            const context = additionalData.context;
+                            if (context.industry_context) resultText += `- **산업 맥락**: ${context.industry_context}\\n`;
+                            if (context.market_context) resultText += `- **시장 맥락**: ${context.market_context}\\n`;
+                            if (context.social_context) resultText += `- **사회적 맥락**: ${context.social_context}\\n`;
+                            if (context.cultural_context) resultText += `- **문화적 맥락**: ${context.cultural_context}\\n`;
+                            if (context.temporal_context) resultText += `- **시대적 맥락**: ${context.temporal_context}\\n`;
+                            if (context.related_events && Array.isArray(context.related_events) && context.related_events.length > 0) {
+                                resultText += `- **관련 이벤트**:\\n`;
+                                context.related_events.forEach((event, idx) => {
+                                    resultText += `  ${idx + 1}. ${event}\\n`;
+                                });
+                            }
+                            resultText += `\\n`;
+                        }
+                        
+                        // Tone 분석
+                        if (additionalData.tone && typeof additionalData.tone === 'object') {
+                            resultText += `## 🎭 톤 분석 (Tone Analysis)\\n\\n`;
+                            const tone = additionalData.tone;
+                            if (tone.overall_tone) resultText += `- **전체 톤**: ${tone.overall_tone}\\n`;
+                            if (tone.communication_style) resultText += `- **커뮤니케이션 스타일**: ${tone.communication_style}\\n`;
+                            if (tone.formality_level) resultText += `- **격식 수준**: ${tone.formality_level}\\n`;
+                            if (tone.energy_level) resultText += `- **에너지 수준**: ${tone.energy_level}\\n`;
+                            if (tone.recommended_tone && Array.isArray(tone.recommended_tone) && tone.recommended_tone.length > 0) {
+                                resultText += `- **권장 톤**:\\n`;
+                                tone.recommended_tone.forEach((rec, idx) => {
+                                    resultText += `  ${idx + 1}. ${rec}\\n`;
+                                });
+                            }
+                            resultText += `\\n`;
+                        }
+                        
+                        // Recommendations (키워드 추천 등)
+                        if (additionalData.recommendations && typeof additionalData.recommendations === 'object') {
+                            resultText += `## 💡 키워드 추천 (Keyword Recommendations)\\n\\n`;
+                            const recs = additionalData.recommendations;
+                            
+                            if (recs.semantic_keywords && Array.isArray(recs.semantic_keywords) && recs.semantic_keywords.length > 0) {
+                                resultText += `### 의미적 관련 키워드\\n\\n`;
+                                recs.semantic_keywords.forEach((kw, idx) => {
+                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                    const score = kw.score ? ` (점수: ${kw.score})` : '';
+                                    resultText += `${idx + 1}. ${keyword}${score}\\n`;
+                                });
+                                resultText += `\\n`;
+                            }
+                            
+                            if (recs.co_occurring_keywords && Array.isArray(recs.co_occurring_keywords) && recs.co_occurring_keywords.length > 0) {
+                                resultText += `### 공기 키워드\\n\\n`;
+                                recs.co_occurring_keywords.forEach((kw, idx) => {
+                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                    resultText += `${idx + 1}. ${keyword}\\n`;
+                                });
+                                resultText += `\\n`;
+                            }
+                            
+                            if (recs.long_tail_keywords && Array.isArray(recs.long_tail_keywords) && recs.long_tail_keywords.length > 0) {
+                                resultText += `### 롱테일 키워드\\n\\n`;
+                                recs.long_tail_keywords.forEach((kw, idx) => {
+                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                    resultText += `${idx + 1}. ${keyword}\\n`;
+                                });
+                                resultText += `\\n`;
+                            }
+                            
+                            if (recs.trending_keywords && Array.isArray(recs.trending_keywords) && recs.trending_keywords.length > 0) {
+                                resultText += `### 트렌딩 키워드\\n\\n`;
+                                recs.trending_keywords.forEach((kw, idx) => {
+                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                    resultText += `${idx + 1}. ${keyword}\\n`;
+                                });
+                                resultText += `\\n`;
+                            }
+                        } else if (additionalData.recommendations && Array.isArray(additionalData.recommendations) && additionalData.recommendations.length > 0) {
+                            resultText += `## 💡 키워드 추천\\n\\n`;
+                            additionalData.recommendations.forEach((rec, idx) => {
+                                const keyword = typeof rec === 'string' ? rec : (rec.keyword || rec);
+                                resultText += `${idx + 1}. ${keyword}\\n`;
+                            });
+                            resultText += `\\n`;
+                        }
+                        
+                        // Analysis Sources
+                        if (additionalData.analysis_sources && Array.isArray(additionalData.analysis_sources) && additionalData.analysis_sources.length > 0) {
+                            resultText += `## 📚 분석 출처 (Analysis Sources)\\n\\n`;
+                            additionalData.analysis_sources.forEach((source, idx) => {
+                                resultText += `${idx + 1}. ${source}\\n`;
+                            });
+                            resultText += `\\n`;
+                        }
+                        
                         // 결과가 비어있는 경우 처리
                         const baseReportText = `# 타겟 분석 보고서\\n\\n**분석 대상**: ${targetKeyword}\\n**분석 유형**: ${typeNames[targetType] || targetType} 분석\\n**분석 기간**: ${formData.start_date} ~ ${formData.end_date}\\n**분석 일시**: ${new Date().toLocaleString('ko-KR')}\\n\\n---\\n\\n`;
                         const currentText = resultText.trim();
@@ -1412,7 +1533,8 @@ async def root():
                             resultText += `**디버깅 정보**:\\n`;
                             resultText += `- 받은 데이터 타입: ${typeof data.data}\\n`;
                             resultText += `- analysisData 타입: ${typeof analysisData}\\n`;
-                            resultText += `- analysisData 키: ${Object.keys(analysisData || {}).join(', ')}\\n\\n`;
+                            resultText += `- analysisData 키: ${Object.keys(analysisData || {}).join(', ')}\\n`;
+                            resultText += `- data.data 키: ${Object.keys(data.data || {}).join(', ')}\\n\\n`;
                             resultText += `**전체 응답 구조**:\\n`;
                             resultText += `\`\`\`json\\n${JSON.stringify({success: data.success, dataKeys: Object.keys(data.data || {}), analysisDataKeys: Object.keys(analysisData || {})}, null, 2)}\\n\`\`\`\\n\\n`;
                             resultText += `**해결 방법**:\\n`;
