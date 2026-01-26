@@ -74,7 +74,7 @@ app.include_router(cache_router, prefix="/api", tags=["cache"])
 # 루트 및 헬스 체크 엔드포인트는 정적 파일 마운트 전에 등록해야 함
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """루트 엔드포인트 - HTML 랜딩 페이지 및 분석 인터페이스 제공"""
+    """루트 엔드포인트 - HTML 랜딩 페이지 및 분석 인터페이스 제공 (블랙/화이트 미니멀 테마)"""
     html_content = """
     <!DOCTYPE html>
     <html lang="ko">
@@ -82,6 +82,9 @@ async def root():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>뉴스 트렌드 분석 서비스</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@100;200;300;400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Nanum+Gothic&family=Noto+Sans+KR:wght@100..900&display=swap" rel="stylesheet">
         <style>
             * {
                 margin: 0;
@@ -89,288 +92,445 @@ async def root():
                 box-sizing: border-box;
             }
             body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background-color: #ffffff;
+                color: #000000;
                 min-height: 100vh;
-                padding: 20px;
+                letter-spacing: -0.48px;
+                line-height: 1.6;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
             }
-            .container {
+            /* 스크롤바 - 블랙/화이트 테마 */
+            ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            ::-webkit-scrollbar-track {
+                background: #ffffff;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: #000000;
+                border-radius: 3px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: #333333;
+            }
+            .main-container {
+                display: flex;
+                flex-direction: column;
+                min-height: 100vh;
+            }
+            .header {
                 background: white;
-                border-radius: 20px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                padding: 40px;
-                max-width: 1200px;
-                width: 100%;
-                margin: 0 auto;
+                border-bottom: 1px solid black;
+                padding: 20px 24px;
+                flex-shrink: 0;
             }
-            h1 {
-                color: #333;
-                font-size: 2.5em;
-                margin-bottom: 10px;
-                text-align: center;
-            }
-            .subtitle {
-                color: #666;
-                text-align: center;
-                margin-bottom: 30px;
-                font-size: 1.1em;
-            }
-            .status {
-                background: #10b981;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 25px;
-                display: inline-block;
-                margin-bottom: 30px;
+            .header h1 {
+                font-size: 1.5rem;
                 font-weight: 600;
+                color: #000000;
+                letter-spacing: -0.8px;
+                margin-bottom: 4px;
             }
-            .analysis-section {
-                background: #f8f9fa;
-                border-radius: 15px;
-                padding: 30px;
-                margin: 30px 0;
+            .header .subtitle {
+                font-size: 0.875rem;
+                color: #000000;
+                letter-spacing: -0.42px;
             }
-            .analysis-section h2 {
-                color: #333;
-                margin-bottom: 20px;
-                font-size: 1.8em;
+            .status-badge {
+                display: inline-block;
+                padding: 6px 12px;
+                background: black;
+                color: white;
+                border: 1px solid black;
+                border-radius: 6px;
+                font-size: 0.75rem;
+                font-weight: 500;
+                margin-top: 12px;
+                letter-spacing: -0.36px;
+            }
+            .content-wrapper {
+                display: flex;
+                flex: 1;
+                flex-direction: column;
+            }
+            @media (min-width: 1024px) {
+                .content-wrapper {
+                    flex-direction: row;
+                }
+            }
+            /* 좌측: 분석 설정 패널 */
+            .settings-panel {
+                width: 100%;
+                background: white;
+                border-right: 1px solid black;
+                padding: 24px;
+                overflow-y: auto;
+            }
+            @media (min-width: 1024px) {
+                .settings-panel {
+                    width: 384px;
+                    flex-shrink: 0;
+                }
+            }
+            .settings-panel h2 {
+                font-size: 1.125rem;
+                font-weight: 600;
+                color: #000000;
+                margin-bottom: 8px;
+                letter-spacing: -0.72px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid black;
+            }
+            .settings-panel .description {
+                font-size: 0.75rem;
+                color: #000000;
+                margin-bottom: 24px;
+                letter-spacing: -0.36px;
             }
             .form-group {
                 margin-bottom: 20px;
             }
             .form-group label {
                 display: block;
+                font-size: 0.75rem;
+                font-weight: 500;
+                color: #000000;
                 margin-bottom: 8px;
-                color: #333;
-                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
             }
             .form-group input,
             .form-group select,
             .form-group textarea {
                 width: 100%;
                 padding: 12px;
-                border: 2px solid #e9ecef;
+                border: 1px solid black;
                 border-radius: 8px;
-                font-size: 1em;
-                transition: border-color 0.3s;
+                font-size: 0.875rem;
+                background: white;
+                color: #000000;
+                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                letter-spacing: -0.42px;
+                transition: all 0.2s ease;
             }
             .form-group input:focus,
             .form-group select:focus,
             .form-group textarea:focus {
                 outline: none;
-                border-color: #667eea;
+                border-color: black;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             }
             .form-group textarea {
                 resize: vertical;
                 min-height: 100px;
             }
-            .btn {
-                background: #667eea;
-                color: white;
-                padding: 12px 30px;
-                border: none;
-                border-radius: 8px;
-                font-size: 1em;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.3s;
-                width: 100%;
-            }
-            .btn:hover {
-                background: #5568d3;
-                transform: translateY(-2px);
-                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
-            }
-            .btn:disabled {
-                background: #ccc;
-                cursor: not-allowed;
-                transform: none;
-            }
-            .loading {
-                display: none;
-                text-align: center;
-                padding: 20px;
-                color: #667eea;
-            }
-            .loading.show {
-                display: block;
-            }
-            .result-section {
-                margin-top: 30px;
-                padding: 20px;
-                background: white;
-                border-radius: 10px;
-                border: 2px solid #e9ecef;
-                display: none;
-            }
-            .result-section.show {
-                display: block;
-            }
-            .result-section h3 {
-                color: #333;
-                margin-bottom: 15px;
-            }
-            .result-content {
-                background: #f8f9fa;
-                padding: 20px;
-                border-radius: 8px;
-                white-space: pre-wrap;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                font-size: 0.95em;
-                line-height: 1.6;
-                max-height: 600px;
-                overflow-y: auto;
-                border: 1px solid #e9ecef;
-            }
-            .copy-btn {
-                background: #10b981;
-                color: white;
-                padding: 8px 16px;
-                border: none;
-                border-radius: 6px;
-                font-size: 0.9em;
-                cursor: pointer;
-                margin-top: 10px;
-                transition: all 0.3s;
-            }
-            .copy-btn:hover {
-                background: #059669;
-            }
-            .copy-btn:active {
-                transform: scale(0.95);
-            }
-            .error {
-                background: #fee;
-                color: #c33;
-                padding: 15px;
-                border-radius: 8px;
-                margin-top: 20px;
-                display: none;
-            }
-            .error.show {
-                display: block;
-            }
-            .links {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-                margin-top: 30px;
-            }
-            .link-card {
-                background: #f8f9fa;
-                border: 2px solid #e9ecef;
-                border-radius: 10px;
-                padding: 20px;
-                text-decoration: none;
-                color: #333;
-                transition: all 0.3s ease;
-                display: block;
-                text-align: center;
-            }
-            .link-card:hover {
-                border-color: #667eea;
-                transform: translateY(-5px);
-                box-shadow: 0 10px 20px rgba(102, 126, 234, 0.2);
-            }
-            .link-card h3 {
-                color: #667eea;
-                margin-bottom: 10px;
-                font-size: 1.2em;
-            }
-            .link-card p {
-                color: #666;
-                font-size: 0.9em;
-            }
-            .version {
-                text-align: center;
-                color: #999;
-                margin-top: 30px;
-                font-size: 0.9em;
-            }
             .checkbox-group {
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                gap: 8px;
             }
             .checkbox-group input[type="checkbox"] {
                 width: auto;
             }
+            .checkbox-group label {
+                margin: 0;
+                text-transform: none;
+                font-weight: 400;
+            }
+            .btn {
+                width: 100%;
+                padding: 12px 24px;
+                background: black;
+                color: white;
+                border: 1px solid black;
+                border-radius: 8px;
+                font-size: 0.875rem;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                letter-spacing: -0.42px;
+            }
+            .btn:hover:not(:disabled) {
+                background: #333333;
+                transform: translateY(-1px);
+            }
+            .btn:disabled {
+                background: #666666;
+                cursor: not-allowed;
+                transform: none;
+            }
+            /* 우측: 분석 결과 패널 */
+            .results-panel {
+                flex: 1;
+                background: white;
+                padding: 24px;
+                overflow-y: auto;
+            }
+            @media (min-width: 1024px) {
+                .results-panel {
+                    padding: 32px;
+                }
+            }
+            .results-panel h2 {
+                font-size: 1.5rem;
+                font-weight: 600;
+                color: #000000;
+                margin-bottom: 8px;
+                letter-spacing: -1.04px;
+            }
+            .results-panel .subtitle {
+                font-size: 0.875rem;
+                color: #000000;
+                margin-bottom: 24px;
+                letter-spacing: -0.42px;
+            }
+            .loading {
+                display: none;
+                text-align: center;
+                padding: 40px;
+                color: #000000;
+            }
+            .loading.show {
+                display: block;
+            }
+            .loading-spinner {
+                border: 2px solid #f3f3f3;
+                border-top: 2px solid #000000;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 16px;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            .error {
+                background: white;
+                color: #000000;
+                padding: 16px;
+                border-radius: 8px;
+                border: 1px solid black;
+                margin-top: 20px;
+                display: none;
+                font-size: 0.875rem;
+                letter-spacing: -0.42px;
+            }
+            .error.show {
+                display: block;
+            }
+            .result-section {
+                margin-top: 24px;
+                padding: 24px;
+                background: white;
+                border-radius: 8px;
+                border: 1px solid black;
+                display: none;
+            }
+            .result-section.show {
+                display: block;
+                animation: fadeIn 0.3s ease;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .result-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 16px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid black;
+            }
+            .result-header h3 {
+                font-size: 1.125rem;
+                font-weight: 600;
+                color: #000000;
+                margin: 0;
+                letter-spacing: -0.72px;
+            }
+            .copy-btn {
+                background: black;
+                color: white;
+                padding: 8px 16px;
+                border: 1px solid black;
+                border-radius: 6px;
+                font-size: 0.75rem;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                letter-spacing: -0.36px;
+            }
+            .copy-btn:hover {
+                background: #333333;
+                transform: translateY(-1px);
+            }
+            .result-content {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                white-space: pre-wrap;
+                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                font-size: 0.875rem;
+                line-height: 1.6;
+                max-height: 70vh;
+                overflow-y: auto;
+                border: 1px solid black;
+                color: #000000;
+                letter-spacing: -0.42px;
+            }
+            .links {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px;
+                margin-top: 32px;
+                padding-top: 32px;
+                border-top: 1px solid black;
+            }
+            .link-card {
+                background: white;
+                border: 1px solid black;
+                border-radius: 8px;
+                padding: 20px;
+                text-decoration: none;
+                color: #000000;
+                transition: all 0.2s ease;
+                display: block;
+                text-align: center;
+            }
+            .link-card:hover {
+                background: black;
+                color: white;
+                transform: translateY(-2px);
+            }
+            .link-card h3 {
+                font-size: 1rem;
+                font-weight: 600;
+                margin-bottom: 8px;
+                letter-spacing: -0.48px;
+            }
+            .link-card p {
+                font-size: 0.75rem;
+                letter-spacing: -0.36px;
+            }
+            .version {
+                text-align: center;
+                color: #000000;
+                margin-top: 32px;
+                padding-top: 24px;
+                border-top: 1px solid black;
+                font-size: 0.75rem;
+                letter-spacing: -0.36px;
+            }
+            .empty-state {
+                text-align: center;
+                padding: 60px 20px;
+                color: #000000;
+            }
+            .empty-state p {
+                font-size: 0.875rem;
+                letter-spacing: -0.42px;
+            }
         </style>
     </head>
     <body>
-        <div class="container">
-            <h1>📊 뉴스 트렌드 분석 서비스</h1>
-            <p class="subtitle">AI 기반 키워드, 오디언스, 경쟁자 분석 플랫폼</p>
-            
-            <div style="text-align: center;">
-                <span class="status">✅ 서비스 정상 운영 중</span>
+        <div class="main-container">
+            <!-- 헤더 -->
+            <div class="header">
+                <h1>뉴스 트렌드 분석 서비스</h1>
+                <p class="subtitle">AI 기반 키워드, 오디언스, 경쟁자 분석 플랫폼</p>
+                <span class="status-badge">서비스 정상 운영 중</span>
             </div>
             
-            <!-- 분석 섹션 -->
-            <div class="analysis-section">
-                <h2>🔍 타겟 분석</h2>
-                <form id="analysisForm">
-                    <div class="form-group">
-                        <label for="target_keyword">분석할 키워드 또는 주제 *</label>
-                        <input type="text" id="target_keyword" name="target_keyword" 
-                               placeholder="예: 인공지능, 스마트폰, 삼성전자" required>
-                    </div>
+            <!-- 메인 컨텐츠: 좌우 분할 -->
+            <div class="content-wrapper">
+                <!-- 좌측: 분석 설정 패널 -->
+                <div class="settings-panel">
+                    <h2>분석 설정</h2>
+                    <p class="description">분석할 키워드와 옵션을 선택하세요</p>
                     
-                    <div class="form-group">
-                        <label for="target_type">분석 유형 *</label>
-                        <select id="target_type" name="target_type" required>
-                            <option value="keyword">키워드 분석</option>
-                            <option value="audience">오디언스 분석</option>
-                            <option value="competitor">경쟁자 분석</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="additional_context">추가 컨텍스트 (선택사항)</label>
-                        <textarea id="additional_context" name="additional_context" 
-                                  placeholder="추가로 제공할 컨텍스트 정보를 입력하세요"></textarea>
-                    </div>
-                    
-                    <div class="form-group checkbox-group">
-                        <input type="checkbox" id="use_gemini" name="use_gemini">
-                        <label for="use_gemini" style="margin: 0;">Gemini API 사용 (OpenAI 대신)</label>
-                    </div>
-                    
-                    <button type="submit" class="btn" id="analyzeBtn">분석 시작</button>
-                </form>
-                
-                <div class="loading" id="loading">
-                    <p>⏳ 분석 중입니다. 잠시만 기다려주세요...</p>
+                    <form id="analysisForm">
+                        <div class="form-group">
+                            <label for="target_keyword">분석할 키워드 또는 주제 *</label>
+                            <input type="text" id="target_keyword" name="target_keyword" 
+                                   placeholder="예: 인공지능, 스마트폰, 삼성전자" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="target_type">분석 유형 *</label>
+                            <select id="target_type" name="target_type" required>
+                                <option value="keyword">키워드 분석</option>
+                                <option value="audience">오디언스 분석</option>
+                                <option value="competitor">경쟁자 분석</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="additional_context">추가 컨텍스트 (선택사항)</label>
+                            <textarea id="additional_context" name="additional_context" 
+                                      placeholder="추가로 제공할 컨텍스트 정보를 입력하세요"></textarea>
+                        </div>
+                        
+                        <div class="form-group checkbox-group">
+                            <input type="checkbox" id="use_gemini" name="use_gemini">
+                            <label for="use_gemini">Gemini API 사용 (OpenAI 대신)</label>
+                        </div>
+                        
+                        <button type="submit" class="btn" id="analyzeBtn">분석 시작</button>
+                    </form>
                 </div>
                 
-                <div class="error" id="error"></div>
-                
-                <div class="result-section" id="resultSection">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="margin: 0;">📊 분석 결과</h3>
-                        <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">📋 복사</button>
+                <!-- 우측: 분석 결과 패널 -->
+                <div class="results-panel">
+                    <h2>분석 결과</h2>
+                    <p class="subtitle">분석 결과가 여기에 표시됩니다</p>
+                    
+                    <div class="loading" id="loading">
+                        <div class="loading-spinner"></div>
+                        <p>분석 중입니다. 잠시만 기다려주세요...</p>
                     </div>
-                    <div class="result-content" id="resultContent"></div>
+                    
+                    <div class="error" id="error"></div>
+                    
+                    <div class="empty-state" id="emptyState">
+                        <p>좌측에서 분석 설정을 입력하고 "분석 시작" 버튼을 클릭하세요.</p>
+                    </div>
+                    
+                    <div class="result-section" id="resultSection">
+                        <div class="result-header">
+                            <h3>분석 결과</h3>
+                            <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">복사</button>
+                        </div>
+                        <div class="result-content" id="resultContent"></div>
+                    </div>
+                    
+                    <div class="links">
+                        <a href="/docs" class="link-card">
+                            <h3>API 문서</h3>
+                            <p>Swagger UI를 통한 API 테스트 및 문서 확인</p>
+                        </a>
+                        <a href="/health" class="link-card">
+                            <h3>헬스 체크</h3>
+                            <p>서비스 상태 확인</p>
+                        </a>
+                        <a href="/openapi.json" class="link-card">
+                            <h3>OpenAPI 스펙</h3>
+                            <p>API 스펙 JSON 다운로드</p>
+                        </a>
+                    </div>
+                    
+                    <div class="version">
+                        Version 1.0.0 | 뉴스 트렌드 분석 서비스
+                    </div>
                 </div>
-            </div>
-            
-            <div class="links">
-                <a href="/docs" class="link-card">
-                    <h3>📚 API 문서</h3>
-                    <p>Swagger UI를 통한 API 테스트 및 문서 확인</p>
-                </a>
-                <a href="/health" class="link-card">
-                    <h3>💚 헬스 체크</h3>
-                    <p>서비스 상태 확인</p>
-                </a>
-                <a href="/openapi.json" class="link-card">
-                    <h3>📋 OpenAPI 스펙</h3>
-                    <p>API 스펙 JSON 다운로드</p>
-                </a>
-            </div>
-            
-            <div class="version">
-                Version 1.0.0 | 뉴스 트렌드 분석 서비스
             </div>
         </div>
         
@@ -383,12 +543,12 @@ async def root():
                 navigator.clipboard.writeText(text).then(function() {
                     const copyBtn = document.getElementById('copyBtn');
                     const originalText = copyBtn.textContent;
-                    copyBtn.textContent = '✅ 복사됨!';
-                    copyBtn.style.background = '#10b981';
+                    copyBtn.textContent = '복사됨!';
+                    copyBtn.style.background = '#333333';
                     
                     setTimeout(function() {
                         copyBtn.textContent = originalText;
-                        copyBtn.style.background = '#10b981';
+                        copyBtn.style.background = 'black';
                     }, 2000);
                 }).catch(function(err) {
                     console.error('복사 실패:', err);
@@ -405,11 +565,13 @@ async def root():
                 const resultSection = document.getElementById('resultSection');
                 const resultContent = document.getElementById('resultContent');
                 const analyzeBtn = document.getElementById('analyzeBtn');
+                const emptyState = document.getElementById('emptyState');
                 
                 // 초기화
                 loading.classList.add('show');
                 error.classList.remove('show');
                 resultSection.classList.remove('show');
+                emptyState.style.display = 'none';
                 analyzeBtn.disabled = true;
                 
                 // 폼 데이터 수집
@@ -652,12 +814,14 @@ async def root():
                         
                         resultContent.textContent = resultText;
                         resultSection.classList.add('show');
+                        emptyState.style.display = 'none';
                     } else {
                         throw new Error('분석 결과를 받지 못했습니다.');
                     }
                 } catch (err) {
                     error.textContent = '오류: ' + err.message;
                     error.classList.add('show');
+                    emptyState.style.display = 'none';
                 } finally {
                     loading.classList.remove('show');
                     analyzeBtn.disabled = false;
