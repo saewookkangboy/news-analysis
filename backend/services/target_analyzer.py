@@ -2,6 +2,7 @@
 타겟 분석 서비스
 AI를 사용하여 키워드, 오디언스, 경쟁자 분석을 수행합니다.
 """
+import os
 import logging
 from typing import Optional, Dict, Any
 import json
@@ -181,7 +182,6 @@ async def _analyze_with_gemini(
     """Gemini API를 사용한 분석"""
     try:
         import asyncio
-        import os
         
         # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
         # 여러 소스에서 API 키 확인 (우선순위: 환경 변수 > Settings)
@@ -539,7 +539,6 @@ def _analyze_basic(
     
     # MECE 구조로 기본 분석 결과 반환
     # API 키 상태 확인 (환경 변수에서 직접 확인 - Vercel 호환성)
-    import os
     openai_env = os.getenv('OPENAI_API_KEY')
     gemini_env = os.getenv('GEMINI_API_KEY')
     openai_settings = getattr(settings, 'OPENAI_API_KEY', None)
