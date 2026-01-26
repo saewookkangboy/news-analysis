@@ -175,7 +175,7 @@ const Dashboard: React.FC = React.memo(() => {
   const categoryTitle = useMemo(() => getCategoryTitle(selectedCategory), [selectedCategory, getCategoryTitle]);
 
   return (
-    <div className="h-full flex flex-col lg:flex-row bg-white">
+    <div className="min-h-full flex flex-col lg:flex-row bg-white">
       {/* 좌측: 분석 설정 패널 */}
       <div className="w-full lg:w-80 xl:w-96 bg-white border-r border-black p-6 overflow-y-auto custom-scrollbar">
         <AnalysisSettings

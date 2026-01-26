@@ -15,10 +15,10 @@ function App() {
   return (
     <ErrorBoundary>
       <Router>
-        <div className="h-screen flex flex-col bg-white">
+        <div className="min-h-screen flex flex-col bg-white">
           <NetworkStatus />
           <Navigation />
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-y-auto">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/scenarios" element={<ScenarioManager />} />

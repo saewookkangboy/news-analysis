@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Body, Query
 from backend.services.target_analyzer import analyze_target
 from backend.services.sentiment_analyzer import analyze_sentiment, analyze_context, analyze_tone
 from backend.services.keyword_recommender import recommend_keywords
+from backend.services.progress_tracker import create_progress_tracker, get_progress_tracker, remove_progress_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ async def analyze_target_endpoint(
                 detail="target_type은 'keyword', 'audience', 'competitor' 중 하나여야 합니다."
             )
         
+        # Progress tracker 생성
+        progress_tracker = create_progress_tracker()
+        
         # 타겟 분석 수행
         result = await analyze_target(
             target_keyword=target_keyword,
@@ -43,12 +47,15 @@ async def analyze_target_endpoint(
             additional_context=additional_context,
             use_gemini=use_gemini,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            progress_tracker=progress_tracker
         )
         
         # 정성적 분석 포함
         if include_sentiment:
             try:
+                if progress_tracker:
+                    await progress_tracker.update(50, "정성적 분석 수행 중...")
                 sentiment_result = await analyze_sentiment(
                     target_keyword=target_keyword,
                     additional_context=additional_context,
@@ -69,12 +76,16 @@ async def analyze_target_endpoint(
                     use_gemini=use_gemini
                 )
                 result["tone"] = tone_result.get("tone", {})
+                if progress_tracker:
+                    await progress_tracker.update(70, "정성적 분석 완료")
             except Exception as e:
                 logger.warning(f"정성적 분석 중 오류 (무시됨): {e}")
         
         # 키워드 추천 포함
         if include_recommendations:
             try:
+                if progress_tracker:
+                    await progress_tracker.update(75, "키워드 추천 생성 중...")
                 recommendations = await recommend_keywords(
                     target_keyword=target_keyword,
                     recommendation_type="all",
@@ -83,10 +94,16 @@ async def analyze_target_endpoint(
                     use_gemini=use_gemini
                 )
                 result["recommendations"] = recommendations
+                if progress_tracker:
+                    await progress_tracker.update(95, "키워드 추천 완료")
             except Exception as e:
                 logger.warning(f"키워드 추천 중 오류 (무시됨): {e}")
         
         logger.info(f"타겟 분석 완료: {target_keyword} ({target_type})")
+        
+        # Progress tracker 정리
+        if 'progress_tracker' in locals() and progress_tracker:
+            remove_progress_tracker(progress_tracker.task_id)
         
         return {
             "success": True,
@@ -94,9 +111,15 @@ async def analyze_target_endpoint(
         }
         
     except HTTPException:
+        # HTTPException 발생 시에도 progress tracker 정리
+        if 'progress_tracker' in locals() and progress_tracker:
+            remove_progress_tracker(progress_tracker.task_id)
         raise
     except Exception as e:
         logger.error(f"타겟 분석 중 오류: {e}")
+        # 오류 발생 시에도 progress tracker 정리
+        if 'progress_tracker' in locals() and progress_tracker:
+            remove_progress_tracker(progress_tracker.task_id)
         raise HTTPException(
             status_code=500,
             detail=f"타겟 분석 실패: {str(e)}"
