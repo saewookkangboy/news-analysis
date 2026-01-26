@@ -780,21 +780,17 @@ async def root():
                         // JSON 데이터 파싱 - 여러 구조 지원
                         console.log('받은 데이터 구조:', Object.keys(data.data || {}));
                         
-                        // 우선순위: executive_summary, key_findings, detailed_analysis가 있으면 data.data를 직접 사용
-                        // (이것이 가장 완전한 데이터 구조)
+                        // data.data를 기본으로 사용하고, analysis 필드가 있으면 병합
                         if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
-                            // MECE 구조의 완전한 분석 데이터가 있는 경우 (우선 사용)
-                            if (data.data.executive_summary || data.data.key_findings || data.data.detailed_analysis || data.data.strategic_recommendations) {
-                                analysisData = data.data;
-                                console.log('MECE 구조 데이터 사용:', Object.keys(analysisData));
+                            // data.data를 기본으로 사용
+                            analysisData = { ...data.data };
+                            
+                            // analysis 필드가 있고 그것이 객체인 경우 병합
+                            if (data.data.analysis && typeof data.data.analysis === 'object') {
+                                analysisData = { ...analysisData, ...data.data.analysis };
+                                console.log('analysis 필드 병합:', Object.keys(analysisData));
                             }
-                            // analysis 필드가 있고 그것이 객체인 경우
-                            else if (data.data.analysis && typeof data.data.analysis === 'object') {
-                                // analysis 필드와 data.data의 다른 필드들을 병합
-                                analysisData = { ...data.data, ...data.data.analysis };
-                                console.log('analysis 필드 병합 사용:', Object.keys(analysisData));
-                            }
-                            // analysis 필드가 문자열인 경우 (JSON 파싱 필요)
+                            // analysis 필드가 문자열인 경우 (JSON 파싱 후 병합)
                             else if (data.data.analysis && typeof data.data.analysis === 'string') {
                                 try {
                                     let cleanAnalysis = data.data.analysis;
@@ -812,19 +808,16 @@ async def root():
                                     }
                                     cleanAnalysis = cleanAnalysis.replace(/```/g, '').trim();
                                     const parsedAnalysis = JSON.parse(cleanAnalysis);
-                                    // 파싱된 analysis와 data.data의 다른 필드들을 병합
-                                    analysisData = { ...data.data, ...parsedAnalysis };
-                                    console.log('JSON 파싱 후 병합 사용:', Object.keys(analysisData));
+                                    // 파싱된 analysis와 병합 (analysis 필드 내용이 우선)
+                                    analysisData = { ...analysisData, ...parsedAnalysis };
+                                    console.log('JSON 파싱 후 병합:', Object.keys(analysisData));
                                 } catch (parseError) {
-                                    console.warn('JSON 파싱 실패, data.data 전체 사용:', parseError);
-                                    analysisData = data.data;
+                                    console.warn('JSON 파싱 실패, analysis 필드 무시:', parseError);
+                                    // 파싱 실패 시 analysis 필드는 무시하고 data.data만 사용
                                 }
                             }
-                            // 그 외에는 data.data 전체 사용
-                            else {
-                                analysisData = data.data;
-                                console.log('data.data 전체 사용:', Object.keys(analysisData));
-                            }
+                            
+                            console.log('최종 analysisData 구조:', Object.keys(analysisData));
                         }
                         // data가 직접 분석 결과인 경우
                         else if (data.executive_summary || data.key_findings || data.detailed_analysis) {
@@ -838,7 +831,15 @@ async def root():
                         }
                         
                         console.log('파싱된 analysisData 최종 구조:', Object.keys(analysisData || {}));
-                        console.log('analysisData 상세:', JSON.stringify(analysisData, null, 2));
+                        console.log('analysisData 상세 (일부):', JSON.stringify({
+                            executive_summary: analysisData?.executive_summary?.substring(0, 100),
+                            has_key_findings: !!analysisData?.key_findings,
+                            has_detailed_analysis: !!analysisData?.detailed_analysis,
+                            has_sentiment: !!analysisData?.sentiment,
+                            has_context: !!analysisData?.context,
+                            has_tone: !!analysisData?.tone,
+                            has_recommendations: !!analysisData?.recommendations
+                        }, null, 2));
                         
                         // Markdown 형식으로 변환
                         const targetKeyword = formData.target_keyword;
@@ -858,64 +859,249 @@ async def root():
                         
                         // 오디언스 분석인 경우 특별한 포맷팅 (MECE 구조 지원)
                         if (targetType === 'audience' && analysisData) {
-                            // Executive Summary
+                            // Executive Summary (중복 제거)
+                            let executiveSummary = null;
                             if (analysisData.executive_summary) {
-                                resultText += `## 📋 Executive Summary\\n\\n${analysisData.executive_summary}\\n\\n`;
+                                executiveSummary = analysisData.executive_summary;
                             } else if (analysisData.summary) {
-                                resultText += `## 📋 요약\\n\\n${analysisData.summary}\\n\\n`;
+                                executiveSummary = analysisData.summary;
+                            }
+                            
+                            // 중복된 내용 제거 (API 키 경고 메시지 등)
+                            if (executiveSummary) {
+                                // 중복된 문장 제거
+                                const lines = executiveSummary.split('\\n');
+                                const uniqueLines = [];
+                                const seen = new Set();
+                                
+                                lines.forEach(line => {
+                                    const trimmed = line.trim();
+                                    // API 키 경고 메시지 제거
+                                    if (trimmed.includes('⚠️ AI API 키가 설정되지 않아') || 
+                                        trimmed.includes('기본 분석 모드로 실행되었습니다') ||
+                                        trimmed.includes('AI API를 설정하면')) {
+                                        return; // 이 줄은 건너뛰기
+                                    }
+                                    // 중복 제거
+                                    if (trimmed && !seen.has(trimmed)) {
+                                        seen.add(trimmed);
+                                        uniqueLines.push(line);
+                                    }
+                                });
+                                
+                                const cleanedSummary = uniqueLines.join('\\n').trim();
+                                if (cleanedSummary) {
+                                    resultText += `## 📋 Executive Summary\\n\\n${cleanedSummary}\\n\\n`;
+                                }
                             }
                             
                             // Key Findings
                             if (analysisData.key_findings) {
                                 resultText += `## 🔑 주요 발견사항 (Key Findings)\\n\\n`;
                                 
-                                if (analysisData.key_findings.primary_insights && analysisData.key_findings.primary_insights.length > 0) {
+                                const keyFindings = analysisData.key_findings;
+                                
+                                // primary_insights가 배열인 경우
+                                if (keyFindings.primary_insights && Array.isArray(keyFindings.primary_insights) && keyFindings.primary_insights.length > 0) {
                                     resultText += `### 핵심 인사이트\\n\\n`;
-                                    analysisData.key_findings.primary_insights.forEach((point, idx) => {
-                                        resultText += `${idx + 1}. ${point}\\n`;
+                                    keyFindings.primary_insights.forEach((point, idx) => {
+                                        // API 키 경고 메시지 제거
+                                        if (!point.includes('⚠️ AI API 키가 설정되지 않아') && 
+                                            !point.includes('기본 분석 모드') &&
+                                            !point.includes('AI API를 설정하면')) {
+                                            resultText += `${idx + 1}. ${point}\\n`;
+                                        }
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                // primary_insights가 문자열인 경우
+                                else if (keyFindings.primary_insights && typeof keyFindings.primary_insights === 'string') {
+                                    resultText += `### 핵심 인사이트\\n\\n${keyFindings.primary_insights}\\n\\n`;
+                                }
+                                
+                                // quantitative_metrics
+                                if (keyFindings.quantitative_metrics && typeof keyFindings.quantitative_metrics === 'object') {
+                                    resultText += `### 정량적 지표\\n\\n`;
+                                    const metrics = keyFindings.quantitative_metrics;
+                                    // 모든 메트릭 필드를 동적으로 표시
+                                    Object.keys(metrics).forEach(key => {
+                                        const value = metrics[key];
+                                        if (value && !value.toString().includes('AI API 필요')) {
+                                            const labelMap = {
+                                                'estimated_volume': '예상 규모',
+                                                'engagement_level': '참여 수준',
+                                                'growth_potential': '성장 잠재력',
+                                                'market_value': '시장 가치',
+                                                'accessibility': '접근 난이도'
+                                            };
+                                            const label = labelMap[key] || key;
+                                            resultText += `- **${label}**: ${value}\\n`;
+                                        }
                                     });
                                     resultText += `\\n`;
                                 }
                                 
-                                if (analysisData.key_findings.quantitative_metrics) {
-                                    resultText += `### 정량적 지표\\n\\n`;
-                                    const metrics = analysisData.key_findings.quantitative_metrics;
-                                    if (metrics.estimated_volume) resultText += `- **예상 규모**: ${metrics.estimated_volume}\\n`;
-                                    if (metrics.engagement_level) resultText += `- **참여 수준**: ${metrics.engagement_level}\\n`;
-                                    if (metrics.growth_potential) resultText += `- **성장 잠재력**: ${metrics.growth_potential}\\n`;
-                                    if (metrics.market_value) resultText += `- **시장 가치**: ${metrics.market_value}\\n`;
-                                    if (metrics.accessibility) resultText += `- **접근 난이도**: ${metrics.accessibility}\\n`;
-                                    resultText += `\\n`;
-                                }
-                            } else if (analysisData.key_points && analysisData.key_points.length > 0) {
+                                // keyFindings의 다른 필드들도 표시
+                                Object.keys(keyFindings).forEach(key => {
+                                    if (key !== 'primary_insights' && key !== 'quantitative_metrics' && keyFindings[key]) {
+                                        resultText += `### ${key}\\n\\n`;
+                                        if (Array.isArray(keyFindings[key])) {
+                                            keyFindings[key].forEach((item, idx) => {
+                                                resultText += `${idx + 1}. ${item}\\n`;
+                                            });
+                                        } else if (typeof keyFindings[key] === 'object') {
+                                            resultText += JSON.stringify(keyFindings[key], null, 2) + `\\n`;
+                                        } else {
+                                            resultText += `${keyFindings[key]}\\n`;
+                                        }
+                                        resultText += `\\n`;
+                                    }
+                                });
+                            } else if (analysisData.key_points && Array.isArray(analysisData.key_points) && analysisData.key_points.length > 0) {
                                 resultText += `## 🔑 주요 포인트\\n\\n`;
                                 analysisData.key_points.forEach((point, idx) => {
-                                    resultText += `${idx + 1}. ${point}\\n`;
+                                    // API 키 경고 메시지 제거
+                                    if (!point.includes('⚠️ AI API 키가 설정되지 않아') && 
+                                        !point.includes('기본 분석 모드') &&
+                                        !point.includes('AI API를 설정하면')) {
+                                        resultText += `${idx + 1}. ${point}\\n`;
+                                    }
                                 });
                                 resultText += `\\n`;
                             }
                             
                             // Detailed Analysis
-                            const detailedAnalysis = analysisData.detailed_analysis || analysisData;
-                            const insights = detailedAnalysis.insights || analysisData.insights;
+                            const detailedAnalysis = analysisData.detailed_analysis;
+                            const insights = detailedAnalysis?.insights || analysisData.insights;
                             
-                            if (insights) {
+                            // detailed_analysis가 직접 객체인 경우
+                            if (detailedAnalysis && typeof detailedAnalysis === 'object') {
+                                resultText += `## 💡 상세 분석 (Detailed Analysis)\\n\\n`;
+                                
+                                // insights가 있는 경우
+                                if (insights) {
+                                    if (insights.demographics) {
+                                        resultText += `### 인구통계학적 특성\\n\\n`;
+                                        const demo = insights.demographics;
+                                        if (typeof demo === 'object') {
+                                            if (demo.age_range) resultText += `- **연령대**: ${demo.age_range}\\n`;
+                                            if (demo.gender) resultText += `- **성별**: ${demo.gender}\\n`;
+                                            if (demo.location) resultText += `- **지역**: ${demo.location}\\n`;
+                                            if (demo.income_level) resultText += `- **소득 수준**: ${demo.income_level}\\n`;
+                                            if (demo.education_level) resultText += `- **교육 수준**: ${demo.education_level}\\n`;
+                                            if (demo.family_status) resultText += `- **가족 구성**: ${demo.family_status}\\n`;
+                                            if (demo.expected_occupations && Array.isArray(demo.expected_occupations) && demo.expected_occupations.length > 0) {
+                                                resultText += `- **예상 직업**:\\n`;
+                                                demo.expected_occupations.forEach(occupation => {
+                                                    resultText += `  - ${occupation}\\n`;
+                                                });
+                                            }
+                                        } else {
+                                            resultText += `${demo}\\n`;
+                                        }
+                                        resultText += `\\n`;
+                                    }
+                                    
+                                    if (insights.psychographics) {
+                                        resultText += `### 심리적 특성\\n\\n`;
+                                        const psycho = insights.psychographics;
+                                        if (typeof psycho === 'object') {
+                                            if (psycho.lifestyle) resultText += `- **라이프스타일**: ${psycho.lifestyle}\\n`;
+                                            if (psycho.values) resultText += `- **가치관**: ${psycho.values}\\n`;
+                                            if (psycho.interests) resultText += `- **관심사**: ${psycho.interests}\\n`;
+                                            if (psycho.personality_traits) resultText += `- **성격 특성**: ${psycho.personality_traits}\\n`;
+                                            if (psycho.aspirations) resultText += `- **열망 및 목표**: ${psycho.aspirations}\\n`;
+                                            if (psycho.fears_concerns) resultText += `- **우려사항**: ${psycho.fears_concerns}\\n`;
+                                        } else {
+                                            resultText += `${psycho}\\n`;
+                                        }
+                                        resultText += `\\n`;
+                                    }
+                                    
+                                    if (insights.behavior) {
+                                        resultText += `### 행동 패턴\\n\\n`;
+                                        const behavior = insights.behavior;
+                                        if (typeof behavior === 'object') {
+                                            if (behavior.purchase_behavior) resultText += `- **구매 행동**: ${behavior.purchase_behavior}\\n`;
+                                            if (behavior.media_consumption) resultText += `- **미디어 소비**: ${behavior.media_consumption}\\n`;
+                                            if (behavior.online_activity) resultText += `- **온라인 활동**: ${behavior.online_activity}\\n`;
+                                            if (behavior.brand_loyalty) resultText += `- **브랜드 충성도**: ${behavior.brand_loyalty}\\n`;
+                                            if (behavior.decision_making) resultText += `- **의사결정 프로세스**: ${behavior.decision_making}\\n`;
+                                        } else {
+                                            resultText += `${behavior}\\n`;
+                                        }
+                                        resultText += `\\n`;
+                                    }
+                                    
+                                    if (insights.trends && Array.isArray(insights.trends) && insights.trends.length > 0) {
+                                        resultText += `### 트렌드\\n\\n`;
+                                        insights.trends.forEach((trend, idx) => {
+                                            resultText += `${idx + 1}. ${trend}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    
+                                    if (insights.opportunities && Array.isArray(insights.opportunities) && insights.opportunities.length > 0) {
+                                        resultText += `### 기회\\n\\n`;
+                                        insights.opportunities.forEach((opp, idx) => {
+                                            resultText += `${idx + 1}. ${opp}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    
+                                    if (insights.challenges && Array.isArray(insights.challenges) && insights.challenges.length > 0) {
+                                        resultText += `### 도전 과제\\n\\n`;
+                                        insights.challenges.forEach((challenge, idx) => {
+                                            resultText += `${idx + 1}. ${challenge}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                }
+                                // insights가 없지만 detailed_analysis가 문자열인 경우
+                                else if (typeof detailedAnalysis === 'string') {
+                                    resultText += detailedAnalysis + `\\n\\n`;
+                                }
+                                // detailed_analysis가 객체이지만 insights가 없는 경우
+                                else if (typeof detailedAnalysis === 'object') {
+                                    // detailed_analysis의 모든 필드를 표시
+                                    Object.keys(detailedAnalysis).forEach(key => {
+                                        if (key !== 'insights' && detailedAnalysis[key]) {
+                                            resultText += `### ${key}\\n\\n`;
+                                            if (typeof detailedAnalysis[key] === 'object' && !Array.isArray(detailedAnalysis[key])) {
+                                                Object.keys(detailedAnalysis[key]).forEach(subKey => {
+                                                    resultText += `- **${subKey}**: ${JSON.stringify(detailedAnalysis[key][subKey])}\\n`;
+                                                });
+                                            } else if (Array.isArray(detailedAnalysis[key])) {
+                                                detailedAnalysis[key].forEach((item, idx) => {
+                                                    resultText += `${idx + 1}. ${item}\\n`;
+                                                });
+                                            } else {
+                                                resultText += `${detailedAnalysis[key]}\\n`;
+                                            }
+                                            resultText += `\\n`;
+                                        }
+                                    });
+                                }
+                            }
+                            // detailed_analysis가 없지만 insights가 직접 있는 경우
+                            else if (insights && typeof insights === 'object') {
                                 resultText += `## 💡 상세 분석 (Detailed Analysis)\\n\\n`;
                                 
                                 if (insights.demographics) {
                                     resultText += `### 인구통계학적 특성\\n\\n`;
                                     const demo = insights.demographics;
-                                    if (demo.age_range) resultText += `- **연령대**: ${demo.age_range}\\n`;
-                                    if (demo.gender) resultText += `- **성별**: ${demo.gender}\\n`;
-                                    if (demo.location) resultText += `- **지역**: ${demo.location}\\n`;
-                                    if (demo.income_level) resultText += `- **소득 수준**: ${demo.income_level}\\n`;
-                                    if (demo.education_level) resultText += `- **교육 수준**: ${demo.education_level}\\n`;
-                                    if (demo.family_status) resultText += `- **가족 구성**: ${demo.family_status}\\n`;
-                                    if (demo.expected_occupations && demo.expected_occupations.length > 0) {
-                                        resultText += `- **예상 직업**:\\n`;
-                                        demo.expected_occupations.forEach(occupation => {
-                                            resultText += `  - ${occupation}\\n`;
+                                    if (typeof demo === 'object') {
+                                        Object.keys(demo).forEach(key => {
+                                            if (demo[key]) {
+                                                if (Array.isArray(demo[key])) {
+                                                    resultText += `- **${key}**: ${demo[key].join(', ')}\\n`;
+                                                } else {
+                                                    resultText += `- **${key}**: ${demo[key]}\\n`;
+                                                }
+                                            }
                                         });
+                                    } else {
+                                        resultText += `${demo}\\n`;
                                     }
                                     resultText += `\\n`;
                                 }
@@ -923,47 +1109,38 @@ async def root():
                                 if (insights.psychographics) {
                                     resultText += `### 심리적 특성\\n\\n`;
                                     const psycho = insights.psychographics;
-                                    if (psycho.lifestyle) resultText += `- **라이프스타일**: ${psycho.lifestyle}\\n`;
-                                    if (psycho.values) resultText += `- **가치관**: ${psycho.values}\\n`;
-                                    if (psycho.interests) resultText += `- **관심사**: ${psycho.interests}\\n`;
-                                    if (psycho.personality_traits) resultText += `- **성격 특성**: ${psycho.personality_traits}\\n`;
-                                    if (psycho.aspirations) resultText += `- **열망 및 목표**: ${psycho.aspirations}\\n`;
-                                    if (psycho.fears_concerns) resultText += `- **우려사항**: ${psycho.fears_concerns}\\n`;
+                                    if (typeof psycho === 'object') {
+                                        Object.keys(psycho).forEach(key => {
+                                            if (psycho[key]) {
+                                                if (Array.isArray(psycho[key])) {
+                                                    resultText += `- **${key}**: ${psycho[key].join(', ')}\\n`;
+                                                } else {
+                                                    resultText += `- **${key}**: ${psycho[key]}\\n`;
+                                                }
+                                            }
+                                        });
+                                    } else {
+                                        resultText += `${psycho}\\n`;
+                                    }
                                     resultText += `\\n`;
                                 }
                                 
                                 if (insights.behavior) {
                                     resultText += `### 행동 패턴\\n\\n`;
                                     const behavior = insights.behavior;
-                                    if (behavior.purchase_behavior) resultText += `- **구매 행동**: ${behavior.purchase_behavior}\\n`;
-                                    if (behavior.media_consumption) resultText += `- **미디어 소비**: ${behavior.media_consumption}\\n`;
-                                    if (behavior.online_activity) resultText += `- **온라인 활동**: ${behavior.online_activity}\\n`;
-                                    if (behavior.brand_loyalty) resultText += `- **브랜드 충성도**: ${behavior.brand_loyalty}\\n`;
-                                    if (behavior.decision_making) resultText += `- **의사결정 프로세스**: ${behavior.decision_making}\\n`;
-                                    resultText += `\\n`;
-                                }
-                                
-                                if (insights.trends && Array.isArray(insights.trends) && insights.trends.length > 0) {
-                                    resultText += `### 트렌드\\n\\n`;
-                                    insights.trends.forEach((trend, idx) => {
-                                        resultText += `${idx + 1}. ${trend}\\n`;
-                                    });
-                                    resultText += `\\n`;
-                                }
-                                
-                                if (insights.opportunities && Array.isArray(insights.opportunities) && insights.opportunities.length > 0) {
-                                    resultText += `### 기회\\n\\n`;
-                                    insights.opportunities.forEach((opp, idx) => {
-                                        resultText += `${idx + 1}. ${opp}\\n`;
-                                    });
-                                    resultText += `\\n`;
-                                }
-                                
-                                if (insights.challenges && Array.isArray(insights.challenges) && insights.challenges.length > 0) {
-                                    resultText += `### 도전 과제\\n\\n`;
-                                    insights.challenges.forEach((challenge, idx) => {
-                                        resultText += `${idx + 1}. ${challenge}\\n`;
-                                    });
+                                    if (typeof behavior === 'object') {
+                                        Object.keys(behavior).forEach(key => {
+                                            if (behavior[key]) {
+                                                if (Array.isArray(behavior[key])) {
+                                                    resultText += `- **${key}**: ${behavior[key].join(', ')}\\n`;
+                                                } else {
+                                                    resultText += `- **${key}**: ${behavior[key]}\\n`;
+                                                }
+                                            }
+                                        });
+                                    } else {
+                                        resultText += `${behavior}\\n`;
+                                    }
                                     resultText += `\\n`;
                                 }
                             }
@@ -1402,15 +1579,21 @@ async def root():
                         }
                         
                         // 추가 분석 데이터 표시 (sentiment, context, tone, recommendations, analysis_sources)
-                        // 이 필드들은 data.data에 직접 있을 수 있음
-                        const additionalData = data.data || {};
+                        // analysisData와 data.data 모두에서 확인
+                        const sentimentData = analysisData?.sentiment || data.data?.sentiment;
+                        const contextData = analysisData?.context || data.data?.context;
+                        const toneData = analysisData?.tone || data.data?.tone;
+                        const recommendationsData = analysisData?.recommendations || data.data?.recommendations;
+                        const analysisSources = analysisData?.analysis_sources || data.data?.analysis_sources;
                         
                         // Sentiment 분석
-                        if (additionalData.sentiment && typeof additionalData.sentiment === 'object') {
+                        if (sentimentData && typeof sentimentData === 'object') {
                             resultText += `## 😊 감정 분석 (Sentiment Analysis)\\n\\n`;
-                            const sentiment = additionalData.sentiment;
+                            const sentiment = sentimentData;
                             if (sentiment.overall_sentiment) resultText += `- **전체 감정**: ${sentiment.overall_sentiment}\\n`;
-                            if (sentiment.sentiment_score !== undefined) resultText += `- **감정 점수**: ${sentiment.sentiment_score}\\n`;
+                            if (sentiment.sentiment_score !== undefined && sentiment.sentiment_score !== null) {
+                                resultText += `- **감정 점수**: ${sentiment.sentiment_score}\\n`;
+                            }
                             if (sentiment.positive_aspects && Array.isArray(sentiment.positive_aspects) && sentiment.positive_aspects.length > 0) {
                                 resultText += `- **긍정적 측면**:\\n`;
                                 sentiment.positive_aspects.forEach((aspect, idx) => {
@@ -1424,13 +1607,23 @@ async def root():
                                 });
                             }
                             if (sentiment.emotional_tone) resultText += `- **감정적 톤**: ${sentiment.emotional_tone}\\n`;
+                            // sentiment 객체의 다른 필드들도 동적으로 표시
+                            Object.keys(sentiment).forEach(key => {
+                                if (!['overall_sentiment', 'sentiment_score', 'positive_aspects', 'negative_aspects', 'emotional_tone'].includes(key) && sentiment[key]) {
+                                    if (Array.isArray(sentiment[key])) {
+                                        resultText += `- **${key}**: ${sentiment[key].join(', ')}\\n`;
+                                    } else {
+                                        resultText += `- **${key}**: ${sentiment[key]}\\n`;
+                                    }
+                                }
+                            });
                             resultText += `\\n`;
                         }
                         
                         // Context 분석
-                        if (additionalData.context && typeof additionalData.context === 'object') {
+                        if (contextData && typeof contextData === 'object') {
                             resultText += `## 🌐 맥락 분석 (Context Analysis)\\n\\n`;
-                            const context = additionalData.context;
+                            const context = contextData;
                             if (context.industry_context) resultText += `- **산업 맥락**: ${context.industry_context}\\n`;
                             if (context.market_context) resultText += `- **시장 맥락**: ${context.market_context}\\n`;
                             if (context.social_context) resultText += `- **사회적 맥락**: ${context.social_context}\\n`;
@@ -1442,13 +1635,25 @@ async def root():
                                     resultText += `  ${idx + 1}. ${event}\\n`;
                                 });
                             }
+                            // context 객체의 다른 필드들도 동적으로 표시
+                            Object.keys(context).forEach(key => {
+                                if (!['industry_context', 'market_context', 'social_context', 'cultural_context', 'temporal_context', 'related_events'].includes(key) && context[key]) {
+                                    if (Array.isArray(context[key])) {
+                                        resultText += `- **${key}**: ${context[key].join(', ')}\\n`;
+                                    } else if (typeof context[key] === 'object') {
+                                        resultText += `- **${key}**: ${JSON.stringify(context[key])}\\n`;
+                                    } else {
+                                        resultText += `- **${key}**: ${context[key]}\\n`;
+                                    }
+                                }
+                            });
                             resultText += `\\n`;
                         }
                         
                         // Tone 분석
-                        if (additionalData.tone && typeof additionalData.tone === 'object') {
+                        if (toneData && typeof toneData === 'object') {
                             resultText += `## 🎭 톤 분석 (Tone Analysis)\\n\\n`;
-                            const tone = additionalData.tone;
+                            const tone = toneData;
                             if (tone.overall_tone) resultText += `- **전체 톤**: ${tone.overall_tone}\\n`;
                             if (tone.communication_style) resultText += `- **커뮤니케이션 스타일**: ${tone.communication_style}\\n`;
                             if (tone.formality_level) resultText += `- **격식 수준**: ${tone.formality_level}\\n`;
@@ -1459,63 +1664,89 @@ async def root():
                                     resultText += `  ${idx + 1}. ${rec}\\n`;
                                 });
                             }
-                            resultText += `\\n`;
-                        }
-                        
-                        // Recommendations (키워드 추천 등)
-                        if (additionalData.recommendations && typeof additionalData.recommendations === 'object') {
-                            resultText += `## 💡 키워드 추천 (Keyword Recommendations)\\n\\n`;
-                            const recs = additionalData.recommendations;
-                            
-                            if (recs.semantic_keywords && Array.isArray(recs.semantic_keywords) && recs.semantic_keywords.length > 0) {
-                                resultText += `### 의미적 관련 키워드\\n\\n`;
-                                recs.semantic_keywords.forEach((kw, idx) => {
-                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                    const score = kw.score ? ` (점수: ${kw.score})` : '';
-                                    resultText += `${idx + 1}. ${keyword}${score}\\n`;
-                                });
-                                resultText += `\\n`;
-                            }
-                            
-                            if (recs.co_occurring_keywords && Array.isArray(recs.co_occurring_keywords) && recs.co_occurring_keywords.length > 0) {
-                                resultText += `### 공기 키워드\\n\\n`;
-                                recs.co_occurring_keywords.forEach((kw, idx) => {
-                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                    resultText += `${idx + 1}. ${keyword}\\n`;
-                                });
-                                resultText += `\\n`;
-                            }
-                            
-                            if (recs.long_tail_keywords && Array.isArray(recs.long_tail_keywords) && recs.long_tail_keywords.length > 0) {
-                                resultText += `### 롱테일 키워드\\n\\n`;
-                                recs.long_tail_keywords.forEach((kw, idx) => {
-                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                    resultText += `${idx + 1}. ${keyword}\\n`;
-                                });
-                                resultText += `\\n`;
-                            }
-                            
-                            if (recs.trending_keywords && Array.isArray(recs.trending_keywords) && recs.trending_keywords.length > 0) {
-                                resultText += `### 트렌딩 키워드\\n\\n`;
-                                recs.trending_keywords.forEach((kw, idx) => {
-                                    const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                    resultText += `${idx + 1}. ${keyword}\\n`;
-                                });
-                                resultText += `\\n`;
-                            }
-                        } else if (additionalData.recommendations && Array.isArray(additionalData.recommendations) && additionalData.recommendations.length > 0) {
-                            resultText += `## 💡 키워드 추천\\n\\n`;
-                            additionalData.recommendations.forEach((rec, idx) => {
-                                const keyword = typeof rec === 'string' ? rec : (rec.keyword || rec);
-                                resultText += `${idx + 1}. ${keyword}\\n`;
+                            // tone 객체의 다른 필드들도 동적으로 표시
+                            Object.keys(tone).forEach(key => {
+                                if (!['overall_tone', 'communication_style', 'formality_level', 'energy_level', 'recommended_tone'].includes(key) && tone[key]) {
+                                    if (Array.isArray(tone[key])) {
+                                        resultText += `- **${key}**: ${tone[key].join(', ')}\\n`;
+                                    } else {
+                                        resultText += `- **${key}**: ${tone[key]}\\n`;
+                                    }
+                                }
                             });
                             resultText += `\\n`;
                         }
                         
+                        // Recommendations (키워드 추천 등) - strategic_recommendations와 중복되지 않도록 확인
+                        if (recommendationsData && !analysisData?.strategic_recommendations) {
+                            if (typeof recommendationsData === 'object' && !Array.isArray(recommendationsData)) {
+                                resultText += `## 💡 키워드 추천 (Keyword Recommendations)\\n\\n`;
+                                const recs = recommendationsData;
+                                
+                                if (recs.semantic_keywords && Array.isArray(recs.semantic_keywords) && recs.semantic_keywords.length > 0) {
+                                    resultText += `### 의미적 관련 키워드\\n\\n`;
+                                    recs.semantic_keywords.forEach((kw, idx) => {
+                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        const score = kw.score ? ` (점수: ${kw.score})` : '';
+                                        resultText += `${idx + 1}. ${keyword}${score}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (recs.co_occurring_keywords && Array.isArray(recs.co_occurring_keywords) && recs.co_occurring_keywords.length > 0) {
+                                    resultText += `### 공기 키워드\\n\\n`;
+                                    recs.co_occurring_keywords.forEach((kw, idx) => {
+                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        resultText += `${idx + 1}. ${keyword}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (recs.long_tail_keywords && Array.isArray(recs.long_tail_keywords) && recs.long_tail_keywords.length > 0) {
+                                    resultText += `### 롱테일 키워드\\n\\n`;
+                                    recs.long_tail_keywords.forEach((kw, idx) => {
+                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        resultText += `${idx + 1}. ${keyword}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (recs.trending_keywords && Array.isArray(recs.trending_keywords) && recs.trending_keywords.length > 0) {
+                                    resultText += `### 트렌딩 키워드\\n\\n`;
+                                    recs.trending_keywords.forEach((kw, idx) => {
+                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        resultText += `${idx + 1}. ${keyword}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                
+                                // recommendations 객체의 다른 필드들도 동적으로 표시
+                                Object.keys(recs).forEach(key => {
+                                    if (!['semantic_keywords', 'co_occurring_keywords', 'long_tail_keywords', 'trending_keywords'].includes(key) && recs[key]) {
+                                        if (Array.isArray(recs[key]) && recs[key].length > 0) {
+                                            resultText += `### ${key}\\n\\n`;
+                                            recs[key].forEach((item, idx) => {
+                                                const keyword = typeof item === 'string' ? item : (item.keyword || item);
+                                                resultText += `${idx + 1}. ${keyword}\\n`;
+                                            });
+                                            resultText += `\\n`;
+                                        }
+                                    }
+                                });
+                            } else if (Array.isArray(recommendationsData) && recommendationsData.length > 0) {
+                                resultText += `## 💡 키워드 추천\\n\\n`;
+                                recommendationsData.forEach((rec, idx) => {
+                                    const keyword = typeof rec === 'string' ? rec : (rec.keyword || rec);
+                                    resultText += `${idx + 1}. ${keyword}\\n`;
+                                });
+                                resultText += `\\n`;
+                            }
+                        }
+                        
                         // Analysis Sources
-                        if (additionalData.analysis_sources && Array.isArray(additionalData.analysis_sources) && additionalData.analysis_sources.length > 0) {
+                        if (analysisSources && Array.isArray(analysisSources) && analysisSources.length > 0) {
                             resultText += `## 📚 분석 출처 (Analysis Sources)\\n\\n`;
-                            additionalData.analysis_sources.forEach((source, idx) => {
+                            analysisSources.forEach((source, idx) => {
                                 resultText += `${idx + 1}. ${source}\\n`;
                             });
                             resultText += `\\n`;
