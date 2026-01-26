@@ -7,6 +7,9 @@ from typing import Optional, Dict, Any, List
 import json
 
 from backend.config import settings
+from backend.utils.token_optimizer import (
+    optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,14 +73,22 @@ async def _recommend_with_gemini(
         import asyncio
         import os
         
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
         prompt = _build_recommendation_prompt(
-            target_keyword, recommendation_type, max_results, additional_context
+            target_keyword, recommendation_type, max_results, additional_context_optimized
         )
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
+        
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         
-        # 시스템 메시지와 프롬프트 결합
-        system_message = "You are a senior keyword researcher. Respond ONLY in valid JSON format without markdown code blocks."
-        full_prompt = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+        # 시스템 메시지와 프롬프트 결합 (최적화)
+        system_message = "You are a senior keyword researcher. Respond ONLY in valid JSON format."
+        full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(full_prompt)
+        max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
         
         try:
             from google import genai
@@ -88,27 +99,48 @@ async def _recommend_with_gemini(
             try:
                 # JSON 응답 강제 시도 (새로운 API)
                 try:
-                    # generation_config를 dict가 아닌 객체로 전달 시도
-                    from google.genai.types import GenerationConfig
-                    gen_config = GenerationConfig(response_mime_type="application/json")
+                    # config 파라미터 시도
                     response = await loop.run_in_executor(
                         None,
                         lambda: client.models.generate_content(
                             model=model_name,
                             contents=full_prompt,
-                            generation_config=gen_config
+                            config={
+                                "response_mime_type": "application/json",
+                                "max_output_tokens": max_output_tokens
+                            }
                         )
                     )
-                except (TypeError, AttributeError, ImportError) as e:
-                    # generation_config가 지원되지 않는 경우 일반 모드로 재시도
-                    logger.warning(f"JSON 응답 강제 실패 (generation_config 미지원), 일반 모드로 재시도: {e}")
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt
+                except (TypeError, AttributeError) as e:
+                    # config가 지원되지 않는 경우 generation_config 시도
+                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {e}")
+                    try:
+                        from google.genai.types import GenerationConfig
+                        gen_config = GenerationConfig(
+                            response_mime_type="application/json",
+                            max_output_tokens=max_output_tokens
                         )
-                    )
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: client.models.generate_content(
+                                model=model_name,
+                                contents=full_prompt,
+                                generation_config=gen_config
+                            )
+                        )
+                    except (TypeError, AttributeError, ImportError) as e2:
+                        # generation_config도 실패하면 일반 모드로 재시도
+                        logger.warning(f"generation_config도 실패, 일반 모드로 재시도: {e2}")
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: client.models.generate_content(
+                                model=model_name,
+                                contents=full_prompt,
+                                config={
+                                    "max_output_tokens": max_output_tokens
+                                }
+                            )
+                        )
             except Exception as e:
                 logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
                 response = await loop.run_in_executor(
@@ -125,9 +157,13 @@ async def _recommend_with_gemini(
             genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
             model = genai_old.GenerativeModel(model_name)
             
-            # 시스템 메시지와 프롬프트 결합
-            system_message = "You are a senior keyword researcher. Respond ONLY in valid JSON format without markdown code blocks."
-            full_prompt_old = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+            # 시스템 메시지와 프롬프트 결합 (최적화)
+            system_message = "You are a senior keyword researcher. Respond ONLY in valid JSON format."
+            full_prompt_old = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+            
+            # 토큰 수 계산
+            full_prompt_tokens = estimate_tokens(full_prompt_old)
+            max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
             
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
@@ -185,18 +221,22 @@ async def _recommend_with_openai(
             raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
         
         client = AsyncOpenAI(api_key=api_key)
-        prompt = _build_recommendation_prompt(
-            target_keyword, recommendation_type, max_results, additional_context
-        )
         
-        system_message = """You are a senior keyword researcher and SEO strategy consultant with 15+ years of experience.
-Your role is to provide comprehensive keyword recommendations for SEO and content marketing strategies.
-You MUST respond ONLY in valid JSON format without any markdown code blocks or additional text.
-Your recommendations must be:
-- Data-driven with estimated search volume, competition level, and opportunity scores
-- Market-specific (focus on Korean market)
-- Structured following MECE principles
-- Actionable with clear use cases and strategic recommendations"""
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_recommendation_prompt(
+            target_keyword, recommendation_type, max_results, additional_context_optimized
+        )
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
+        
+        system_message = """You are a senior keyword researcher and SEO strategy consultant.
+Provide comprehensive keyword recommendations in JSON format.
+Your recommendations must be data-driven, market-specific (Korean market), and actionable."""
+        system_message = optimize_prompt(system_message, max_length=300)  # 시스템 메시지 최적화
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(system_message) + estimate_tokens(prompt)
+        max_output_tokens = get_max_tokens_for_model(settings.OPENAI_MODEL, full_prompt_tokens)
         
         response = await client.chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -205,6 +245,7 @@ Your recommendations must be:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
+            max_tokens=max_output_tokens,  # 최대 출력 토큰 설정
             response_format={"type": "json_object"}
         )
         

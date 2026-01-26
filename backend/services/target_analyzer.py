@@ -9,6 +9,9 @@ import json
 
 from backend.config import settings
 from backend.services.progress_tracker import ProgressTracker
+from backend.utils.token_optimizer import (
+    optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context
+)
 
 logger = logging.getLogger(__name__)
 
@@ -246,12 +249,18 @@ async def _analyze_with_gemini(
         logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')}")
         logger.info("=" * 60)
         
-        # 프롬프트 생성
-        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
+        # 프롬프트 생성 및 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=500)
+        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
+        
+        # 토큰 최적화 적용
+        prompt_tokens = estimate_tokens(prompt)
+        prompt = optimize_prompt(prompt, max_length=8000)  # 프롬프트 최대 8000자로 제한
         
         # 모델 설정 (기본값: gemini-2.5-flash)
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         logger.info(f"Gemini API 클라이언트 초기화 중... (모델: {model_name})")
+        logger.info(f"프롬프트 토큰 추정: {prompt_tokens}, 최적화 후 길이: {len(prompt)} 문자")
         
         # 새로운 Gemini API 방식 시도 (from google import genai)
         try:
@@ -265,33 +274,73 @@ async def _analyze_with_gemini(
                 # 환경 변수에서 자동으로 가져오기
                 client = genai.Client()
             
-            # 시스템 메시지와 프롬프트 결합
+            # 시스템 메시지와 프롬프트 결합 (최적화)
             system_message = _build_system_message(target_type)
-            full_prompt = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+            system_message = optimize_prompt(system_message, max_length=500)  # 시스템 메시지도 최적화
+            full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+            
+            # 토큰 수 계산 및 max_tokens 설정
+            full_prompt_tokens = estimate_tokens(full_prompt)
+            max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
             logger.info("=" * 60)
             logger.info("📡 Gemini API 요청 전송 중...")
             logger.info(f"모델: {model_name}")
             logger.info(f"프롬프트 길이: {len(full_prompt)} 문자")
+            logger.info(f"프롬프트 토큰 추정: {full_prompt_tokens}")
+            logger.info(f"최대 출력 토큰: {max_output_tokens}")
             logger.info("=" * 60)
             loop = asyncio.get_event_loop()
             try:
                 # JSON 응답 강제 시도 (새로운 API 방식)
                 # config 파라미터를 딕셔너리로 전달
-                response = await loop.run_in_executor(
-                    None, 
-                    lambda: client.models.generate_content(
-                        model=model_name,
-                        contents=full_prompt,
-                        config={
-                            "response_mime_type": "application/json"
-                        }
+                try:
+                    # max_output_tokens 설정 추가
+                    response = await loop.run_in_executor(
+                        None, 
+                        lambda: client.models.generate_content(
+                            model=model_name,
+                            contents=full_prompt,
+                            config={
+                                "response_mime_type": "application/json",
+                                "max_output_tokens": max_output_tokens
+                            }
+                        )
                     )
-                )
-                logger.info("=" * 60)
-                logger.info("✅ Gemini API 응답 수신 완료")
-                logger.info("=" * 60)
+                    logger.info("=" * 60)
+                    logger.info("✅ Gemini API 응답 수신 완료 (JSON 모드)")
+                    logger.info("=" * 60)
+                except (TypeError, AttributeError) as config_error:
+                    # config 파라미터가 지원되지 않는 경우 generation_config 시도
+                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {config_error}")
+                    try:
+                        response = await loop.run_in_executor(
+                            None, 
+                            lambda: client.models.generate_content(
+                                model=model_name,
+                                contents=full_prompt,
+                                generation_config={
+                                    "response_mime_type": "application/json",
+                                    "max_output_tokens": max_output_tokens
+                                }
+                            )
+                        )
+                        logger.info("✅ Gemini API 응답 수신 완료 (generation_config 사용)")
+                    except Exception as gen_error:
+                        # generation_config도 실패하면 일반 모드
+                        logger.warning(f"generation_config도 실패, 일반 모드로 재시도: {gen_error}")
+                        response = await loop.run_in_executor(
+                            None, 
+                            lambda: client.models.generate_content(
+                                model=model_name,
+                                contents=full_prompt,
+                                config={
+                                    "max_output_tokens": max_output_tokens
+                                }
+                            )
+                        )
+                        logger.info("✅ Gemini API 응답 수신 완료 (일반 모드)")
             except Exception as e:
                 logger.warning("=" * 60)
                 logger.warning(f"⚠️ JSON 응답 강제 실패, 일반 모드로 재시도: {type(e).__name__}: {e}")
@@ -325,9 +374,14 @@ async def _analyze_with_gemini(
             genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
             model = genai_old.GenerativeModel(model_name)
             
-            # 시스템 메시지와 프롬프트 결합
+            # 시스템 메시지와 프롬프트 결합 (최적화)
             system_message = _build_system_message(target_type)
-            full_prompt = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+            system_message = optimize_prompt(system_message, max_length=500)
+            full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+            
+            # 토큰 수 계산
+            full_prompt_tokens = estimate_tokens(full_prompt)
+            max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
             loop = asyncio.get_event_loop()
@@ -341,7 +395,8 @@ async def _analyze_with_gemini(
                         lambda: model.generate_content(
                             full_prompt,
                             generation_config=genai_old.types.GenerationConfig(
-                                response_mime_type="application/json"
+                                response_mime_type="application/json",
+                                max_output_tokens=max_output_tokens
                             )
                         )
                     )
@@ -352,7 +407,8 @@ async def _analyze_with_gemini(
                         lambda: model.generate_content(
                             full_prompt,
                             generation_config={
-                                "response_mime_type": "application/json"
+                                "response_mime_type": "application/json",
+                                "max_output_tokens": max_output_tokens
                             }
                         )
                     )
@@ -398,32 +454,56 @@ async def _analyze_with_gemini(
         clean_text = clean_text.strip()
         
         try:
-                result = json.loads(clean_text)
+            result = json.loads(clean_text)
         except json.JSONDecodeError as e:
             logger.warning(f"JSON 파싱 실패, 재시도: {e}")
+            logger.warning(f"실패 위치: line {e.lineno}, column {e.colno}, char {e.pos}")
             # 한 번 더 시도: 중괄호만 추출
             try:
                 start_idx = clean_text.find("{")
                 end_idx = clean_text.rfind("}") + 1
                 if start_idx >= 0 and end_idx > start_idx:
-                    result = json.loads(clean_text[start_idx:end_idx])
+                    # 중괄호 사이의 텍스트 추출
+                    json_text = clean_text[start_idx:end_idx]
+                    # 마지막 쉼표 제거 시도 (잘못된 JSON 형식 수정)
+                    json_text = json_text.rstrip().rstrip(',')
+                    # 닫는 중괄호 다시 추가
+                    if not json_text.endswith("}"):
+                        json_text += "}"
+                    result = json.loads(json_text)
+                    logger.info("✅ 중괄호 추출 후 JSON 파싱 성공")
                 else:
                     raise ValueError("유효한 JSON을 찾을 수 없습니다.")
             except Exception as e2:
-                logger.error(f"JSON 파싱 최종 실패: {e2}, 원본 텍스트: {clean_text[:200]}")
-                # JSON이 아니면 텍스트로 반환
+                logger.error(f"JSON 파싱 최종 실패: {e2}")
+                logger.error(f"원본 텍스트 (처음 500자): {clean_text[:500]}")
+                logger.error(f"원본 텍스트 (마지막 500자): {clean_text[-500:]}")
+                # JSON이 아니면 텍스트로 반환하되, 가능한 부분만 추출
+                try:
+                    # 최소한의 구조라도 추출 시도
+                    if "executive_summary" in clean_text:
+                        # 부분 파싱 시도
+                        import re
+                        exec_match = re.search(r'"executive_summary"\s*:\s*"([^"]+)"', clean_text)
+                        exec_summary = exec_match.group(1) if exec_match else f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다."
+                    else:
+                        exec_summary = f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다."
+                except:
+                    exec_summary = f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다."
+                
                 result = {
-                    "executive_summary": f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다.",
+                    "executive_summary": exec_summary,
                     "key_findings": {
                         "primary_insights": [
                             "AI 응답 파싱에 실패했습니다.",
-                            "원본 응답을 확인하세요."
+                            "원본 응답을 확인하세요.",
+                            f"오류: {str(e2)[:200]}"
                         ],
                         "quantitative_metrics": {}
                     },
                     "detailed_analysis": {
                         "insights": {
-                            "raw_response": result_text[:500]  # 처음 500자만
+                            "raw_response": result_text[:1000] if len(result_text) > 1000 else result_text  # 처음 1000자
                         }
                     },
                     "strategic_recommendations": {
@@ -434,7 +514,8 @@ async def _analyze_with_gemini(
                     },
                     "target_keyword": target_keyword,
                     "target_type": target_type,
-                    "error": "JSON 파싱 실패"
+                    "error": "JSON 파싱 실패",
+                    "raw_response_length": len(result_text)
                 }
         
         # 결과에 메타데이터 추가 (없는 경우에만)
@@ -489,13 +570,23 @@ async def _analyze_with_openai(
         logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}, 길이: {len(api_key)} 문자")
         client = AsyncOpenAI(api_key=api_key)
         
-        # 프롬프트 생성
+        # 프롬프트 생성 및 최적화
         if progress_tracker:
             await progress_tracker.update(20, "프롬프트 생성 중...")
-        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=500)
+        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
         
-        # 시스템 메시지 생성
+        # 토큰 최적화 적용
+        prompt_tokens = estimate_tokens(prompt)
+        prompt = optimize_prompt(prompt, max_length=8000)  # 프롬프트 최대 8000자로 제한
+        
+        # 시스템 메시지 생성 및 최적화
         system_message = _build_system_message(target_type)
+        system_message = optimize_prompt(system_message, max_length=500)
+        
+        # 토큰 수 계산 및 max_tokens 설정
+        full_prompt_tokens = estimate_tokens(system_message) + prompt_tokens
+        max_output_tokens = get_max_tokens_for_model(settings.OPENAI_MODEL, full_prompt_tokens)
         
         if progress_tracker:
             await progress_tracker.update(30, "OpenAI API 요청 전송 중...")
@@ -505,6 +596,8 @@ async def _analyze_with_openai(
         logger.info("📡 OpenAI API 요청 전송 중...")
         logger.info(f"모델: {settings.OPENAI_MODEL}")
         logger.info(f"프롬프트 길이: {len(prompt)} 문자")
+        logger.info(f"프롬프트 토큰 추정: {full_prompt_tokens}")
+        logger.info(f"최대 출력 토큰: {max_output_tokens}")
         logger.info("=" * 60)
         try:
             response = await client.chat.completions.create(
@@ -514,6 +607,7 @@ async def _analyze_with_openai(
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
+                max_tokens=max_output_tokens,  # 최대 출력 토큰 설정
                 response_format={"type": "json_object"}  # JSON 응답 강제
             )
             logger.info("=" * 60)

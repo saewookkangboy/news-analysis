@@ -8,6 +8,9 @@ import json
 from datetime import datetime
 
 from backend.config import settings
+from backend.utils.token_optimizer import (
+    optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,12 +144,20 @@ async def _analyze_sentiment_with_gemini(
         import asyncio
         import os
         
-        prompt = _build_sentiment_prompt(target_keyword, additional_context)
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_sentiment_prompt(target_keyword, additional_context_optimized)
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
+        
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         
-        # 시스템 메시지와 프롬프트 결합
-        system_message = "You are a senior sentiment analyst. Respond ONLY in valid JSON format without markdown code blocks."
-        full_prompt = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+        # 시스템 메시지와 프롬프트 결합 (최적화)
+        system_message = "You are a senior sentiment analyst. Respond ONLY in valid JSON format."
+        full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(full_prompt)
+        max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
         
         try:
             from google import genai
@@ -157,27 +168,48 @@ async def _analyze_sentiment_with_gemini(
             try:
                 # JSON 응답 강제 시도 (새로운 API)
                 try:
-                    # generation_config를 dict가 아닌 객체로 전달 시도
-                    from google.genai.types import GenerationConfig
-                    gen_config = GenerationConfig(response_mime_type="application/json")
+                    # config 파라미터 시도
                     response = await loop.run_in_executor(
                         None,
                         lambda: client.models.generate_content(
                             model=model_name,
                             contents=full_prompt,
-                            generation_config=gen_config
+                            config={
+                                "response_mime_type": "application/json",
+                                "max_output_tokens": max_output_tokens
+                            }
                         )
                     )
-                except (TypeError, AttributeError, ImportError) as e:
-                    # generation_config가 지원되지 않는 경우 일반 모드로 재시도
-                    logger.warning(f"JSON 응답 강제 실패 (generation_config 미지원), 일반 모드로 재시도: {e}")
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt
+                except (TypeError, AttributeError) as e:
+                    # config가 지원되지 않는 경우 generation_config 시도
+                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {e}")
+                    try:
+                        from google.genai.types import GenerationConfig
+                        gen_config = GenerationConfig(
+                            response_mime_type="application/json",
+                            max_output_tokens=max_output_tokens
                         )
-                    )
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: client.models.generate_content(
+                                model=model_name,
+                                contents=full_prompt,
+                                generation_config=gen_config
+                            )
+                        )
+                    except (TypeError, AttributeError, ImportError) as e2:
+                        # generation_config도 실패하면 일반 모드로 재시도
+                        logger.warning(f"generation_config도 실패, 일반 모드로 재시도: {e2}")
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: client.models.generate_content(
+                                model=model_name,
+                                contents=full_prompt,
+                                config={
+                                    "max_output_tokens": max_output_tokens
+                                }
+                            )
+                        )
             except Exception as e:
                 logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
                 response = await loop.run_in_executor(
@@ -194,14 +226,23 @@ async def _analyze_sentiment_with_gemini(
             genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
             model = genai_old.GenerativeModel(model_name)
             
-            # 시스템 메시지와 프롬프트 결합
-            system_message = "You are a senior tone analyst. Respond ONLY in valid JSON format without markdown code blocks."
-            full_prompt_old = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+            # 시스템 메시지와 프롬프트 결합 (최적화)
+            system_message = "You are a senior sentiment analyst. Respond ONLY in valid JSON format."
+            full_prompt_old = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+            
+            # 토큰 수 계산
+            full_prompt_tokens_old = estimate_tokens(full_prompt_old)
+            max_output_tokens_old = get_max_tokens_for_model(model_name, full_prompt_tokens_old)
             
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: model.generate_content(full_prompt_old)
+                lambda: model.generate_content(
+                    full_prompt_old,
+                    generation_config={
+                        "max_output_tokens": max_output_tokens_old
+                    }
+                )
             )
             result_text = response.text if hasattr(response, 'text') else str(response)
         
@@ -252,16 +293,19 @@ async def _analyze_sentiment_with_openai(
             raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
         
         client = AsyncOpenAI(api_key=api_key)
-        prompt = _build_sentiment_prompt(target_keyword, additional_context)
         
-        system_message = """You are a senior sentiment analyst with 15+ years of experience in social listening, brand monitoring, and public sentiment analysis.
-Your role is to provide comprehensive, data-driven sentiment analysis reports for marketing and PR decision-makers.
-You MUST respond ONLY in valid JSON format without any markdown code blocks or additional text.
-Your analysis must be:
-- Data-driven with specific quantitative metrics and qualitative insights
-- Structured following MECE principles
-- Professional consulting-grade quality
-- Actionable with clear strategic recommendations"""
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_sentiment_prompt(target_keyword, additional_context_optimized)
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
+        
+        system_message = """You are a senior sentiment analyst. Provide comprehensive sentiment analysis in JSON format.
+Your analysis must be data-driven, structured, and actionable."""
+        system_message = optimize_prompt(system_message, max_length=300)  # 시스템 메시지 최적화
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(system_message) + estimate_tokens(prompt)
+        max_output_tokens = get_max_tokens_for_model(settings.OPENAI_MODEL, full_prompt_tokens)
         
         response = await client.chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -270,6 +314,7 @@ Your analysis must be:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
+            max_tokens=max_output_tokens,  # 최대 출력 토큰 설정
             response_format={"type": "json_object"}
         )
         
@@ -318,12 +363,20 @@ async def _analyze_context_with_gemini(
         import asyncio
         import os
         
-        prompt = _build_context_prompt(target_keyword, additional_context)
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_context_prompt(target_keyword, additional_context_optimized)
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
+        
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         
-        # 시스템 메시지와 프롬프트 결합
-        system_message = "You are a senior context analyst. Respond ONLY in valid JSON format without markdown code blocks."
-        full_prompt = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+        # 시스템 메시지와 프롬프트 결합 (최적화)
+        system_message = "You are a senior context analyst. Respond ONLY in valid JSON format."
+        full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(full_prompt)
+        max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
         
         try:
             from google import genai
@@ -333,16 +386,32 @@ async def _analyze_context_with_gemini(
             loop = asyncio.get_event_loop()
             try:
                 # JSON 응답 강제 시도
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: client.models.generate_content(
-                        model=model_name,
-                        contents=full_prompt,
-                        generation_config={
-                            "response_mime_type": "application/json"
-                        }
+                try:
+                    # config 파라미터 시도
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: client.models.generate_content(
+                            model=model_name,
+                            contents=full_prompt,
+                            config={
+                                "response_mime_type": "application/json",
+                                "max_output_tokens": max_output_tokens
+                            }
+                        )
                     )
-                )
+                except (TypeError, AttributeError) as e:
+                    # config가 지원되지 않는 경우 generation_config 시도
+                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {e}")
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: client.models.generate_content(
+                            model=model_name,
+                            contents=full_prompt,
+                            generation_config={
+                                "response_mime_type": "application/json"
+                            }
+                        )
+                    )
             except Exception as e:
                 logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
                 response = await loop.run_in_executor(
@@ -420,16 +489,18 @@ async def _analyze_context_with_openai(
             raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
         
         client = AsyncOpenAI(api_key=api_key)
-        prompt = _build_context_prompt(target_keyword, additional_context)
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_context_prompt(target_keyword, additional_context_optimized)
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
         
-        system_message = """You are a senior context analyst and cultural anthropologist with 15+ years of experience.
-Your role is to provide comprehensive, culturally-aware context analysis for marketing and communication strategies.
-You MUST respond ONLY in valid JSON format without any markdown code blocks or additional text.
-Your analysis must be:
-- Culturally sensitive and market-specific (focus on Korean market)
-- Data-driven with specific examples and evidence
-- Structured following MECE principles
-- Actionable with clear strategic recommendations"""
+        system_message = """You are a senior context analyst. Provide comprehensive context analysis in JSON format.
+Your analysis must be culturally sensitive, data-driven, and actionable."""
+        system_message = optimize_prompt(system_message, max_length=300)  # 시스템 메시지 최적화
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(system_message) + estimate_tokens(prompt)
+        max_output_tokens = get_max_tokens_for_model(settings.OPENAI_MODEL, full_prompt_tokens)
         
         response = await client.chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -438,6 +509,7 @@ Your analysis must be:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
+            max_tokens=max_output_tokens,  # 최대 출력 토큰 설정
             response_format={"type": "json_object"}
         )
         
@@ -486,12 +558,20 @@ async def _analyze_tone_with_gemini(
         import asyncio
         import os
         
-        prompt = _build_tone_prompt(target_keyword, additional_context)
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_tone_prompt(target_keyword, additional_context_optimized)
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
+        
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         
-        # 시스템 메시지와 프롬프트 결합
-        system_message = "You are a senior tone analyst. Respond ONLY in valid JSON format without markdown code blocks."
-        full_prompt = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+        # 시스템 메시지와 프롬프트 결합 (최적화)
+        system_message = "You are a senior tone analyst. Respond ONLY in valid JSON format."
+        full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(full_prompt)
+        max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
         
         try:
             from google import genai
@@ -501,16 +581,32 @@ async def _analyze_tone_with_gemini(
             loop = asyncio.get_event_loop()
             try:
                 # JSON 응답 강제 시도
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: client.models.generate_content(
-                        model=model_name,
-                        contents=full_prompt,
-                        generation_config={
-                            "response_mime_type": "application/json"
-                        }
+                try:
+                    # config 파라미터 시도
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: client.models.generate_content(
+                            model=model_name,
+                            contents=full_prompt,
+                            config={
+                                "response_mime_type": "application/json",
+                                "max_output_tokens": max_output_tokens
+                            }
+                        )
                     )
-                )
+                except (TypeError, AttributeError) as e:
+                    # config가 지원되지 않는 경우 generation_config 시도
+                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {e}")
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: client.models.generate_content(
+                            model=model_name,
+                            contents=full_prompt,
+                            generation_config={
+                                "response_mime_type": "application/json"
+                            }
+                        )
+                    )
             except Exception as e:
                 logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
                 response = await loop.run_in_executor(
@@ -527,14 +623,23 @@ async def _analyze_tone_with_gemini(
             genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
             model = genai_old.GenerativeModel(model_name)
             
-            # 시스템 메시지와 프롬프트 결합
-            system_message = "You are a senior tone analyst. Respond ONLY in valid JSON format without markdown code blocks."
-            full_prompt_old = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
+            # 시스템 메시지와 프롬프트 결합 (최적화)
+            system_message = "You are a senior sentiment analyst. Respond ONLY in valid JSON format."
+            full_prompt_old = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+            
+            # 토큰 수 계산
+            full_prompt_tokens_old = estimate_tokens(full_prompt_old)
+            max_output_tokens_old = get_max_tokens_for_model(model_name, full_prompt_tokens_old)
             
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: model.generate_content(full_prompt_old)
+                lambda: model.generate_content(
+                    full_prompt_old,
+                    generation_config={
+                        "max_output_tokens": max_output_tokens_old
+                    }
+                )
             )
             result_text = response.text if hasattr(response, 'text') else str(response)
         
@@ -588,16 +693,19 @@ async def _analyze_tone_with_openai(
             raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
         
         client = AsyncOpenAI(api_key=api_key)
-        prompt = _build_tone_prompt(target_keyword, additional_context)
         
-        system_message = """You are a senior tone analyst and communication style expert with 15+ years of experience.
-Your role is to provide comprehensive tone analysis for brand messaging and communication strategies.
-You MUST respond ONLY in valid JSON format without any markdown code blocks or additional text.
-Your analysis must be:
-- Multi-dimensional with quantitative scores and qualitative descriptions
-- Channel-specific (traditional media, digital media, social media)
-- Structured following MECE principles
-- Actionable with clear tone guidelines and recommendations"""
+        # 추가 컨텍스트 최적화
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_tone_prompt(target_keyword, additional_context_optimized)
+        prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
+        
+        system_message = """You are a senior tone analyst. Provide comprehensive tone analysis in JSON format.
+Your analysis must be multi-dimensional, channel-specific, and actionable."""
+        system_message = optimize_prompt(system_message, max_length=300)  # 시스템 메시지 최적화
+        
+        # 토큰 수 계산
+        full_prompt_tokens = estimate_tokens(system_message) + estimate_tokens(prompt)
+        max_output_tokens = get_max_tokens_for_model(settings.OPENAI_MODEL, full_prompt_tokens)
         
         response = await client.chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -606,6 +714,7 @@ Your analysis must be:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
+            max_tokens=max_output_tokens,  # 최대 출력 토큰 설정
             response_format={"type": "json_object"}
         )
         
