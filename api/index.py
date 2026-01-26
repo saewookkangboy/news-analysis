@@ -50,4 +50,4 @@ except Exception as e:
     handler = error_app
 
 # Vercel에서 인식할 수 있도록 handler export
-__all__ = ["handler", "app"]
+# handler 변수는 Vercel이 자동으로 찾습니다

@@ -1767,7 +1767,7 @@ async def root():
                             resultText += `- analysisData 키: ${Object.keys(analysisData || {}).join(', ')}\\n`;
                             resultText += `- data.data 키: ${Object.keys(data.data || {}).join(', ')}\\n\\n`;
                             resultText += `**전체 응답 구조**:\\n`;
-                            resultText += `\`\`\`json\\n${JSON.stringify({success: data.success, dataKeys: Object.keys(data.data || {}), analysisDataKeys: Object.keys(analysisData || {})}, null, 2)}\\n\`\`\`\\n\\n`;
+                            resultText += `\\\`\\\`\\\`json\\\\n${JSON.stringify({success: data.success, dataKeys: Object.keys(data.data || {}), analysisDataKeys: Object.keys(analysisData || {})}, null, 2)}\\\\n\\\`\\\`\\\`\\\\n\\\\n`;
                             resultText += `**해결 방법**:\\n`;
                             resultText += `1. AI API 키가 설정되어 있는지 확인하세요 (OpenAI 또는 Gemini)\\n`;
                             resultText += `2. 서버 로그를 확인하세요\\n`;
