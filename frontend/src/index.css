@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* 커스텀 스크롤바 - 블랙/화이트 테마 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #000000;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #333333;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #000000 #ffffff;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #000000;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #333333;
+}
+
+/* 애니메이션 */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 대시보드 카드 스타일 - 블랙/화이트 테마 */
+.dashboard-card {
+  @apply bg-white rounded-lg border border-black p-6 transition-all duration-200;
+}
+
+.dashboard-card:hover {
+  @apply border-black;
+}
+
+/* 메트릭 카드 - 블랙/화이트 테마 */
+.metric-card {
+  @apply dashboard-card text-center;
+}
+
+.metric-value {
+  @apply text-3xl font-bold text-black mb-2;
+}
+
+.metric-label {
+  @apply text-sm font-medium text-black;
+}
+
+.metric-change {
+  @apply text-xs font-medium;
+}
+
+.metric-change.positive {
+  @apply text-black;
+}
+
+.metric-change.negative {
+  @apply text-black;
+}
+
+/* 차트 컨테이너 - 블랙/화이트 테마 */
+.chart-container {
+  @apply dashboard-card;
+}
+
+.chart-title {
+  @apply text-lg font-semibold text-black mb-4;
+}
+
+/* 퍼널 차트 - 블랙/화이트 테마 */
+.funnel-stage {
+  @apply flex items-center justify-between p-4 bg-white border border-black rounded-lg mb-3;
+}
+
+.funnel-stage-name {
+  @apply font-medium text-black;
+}
+
+.funnel-stage-value {
+  @apply text-lg font-bold text-black;
+}
+
+.funnel-stage-rate {
+  @apply text-sm text-black;
+}
+
+/* 테이블 스타일 - 블랙/화이트 테마 */
+.data-table {
+  @apply w-full border-collapse;
+}
+
+.data-table th {
+  @apply bg-white text-left text-xs font-medium text-black uppercase tracking-wider px-6 py-3 border-b border-black;
+}
+
+.data-table td {
+  @apply px-6 py-4 whitespace-nowrap text-sm text-black border-b border-black;
+}
+
+.data-table tr:hover {
+  @apply bg-white;
+}
+
+/* 버튼 스타일 - 블랙/화이트 테마 */
+.btn {
+  @apply inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md focus:outline-none transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply btn bg-black text-white border-black hover:bg-gray-900;
+}
+
+.btn-secondary {
+  @apply btn bg-white text-black border-black hover:bg-gray-100;
+}
+
+.btn-success {
+  @apply btn bg-black text-white border-black hover:bg-gray-900;
+}
+
+.btn-danger {
+  @apply btn bg-black text-white border-black hover:bg-gray-900;
+}
+
+/* 폼 스타일 - 블랙/화이트 테마 */
+.form-input {
+  @apply block w-full px-3 py-2 border border-black rounded-md bg-white text-black placeholder-gray-500 focus:outline-none focus:border-black sm:text-sm;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-black mb-1;
+}
+
+.form-error {
+  @apply mt-1 text-sm text-black;
+}
+
+/* 로딩 스피너 - 블랙/화이트 테마 */
+.loading-spinner {
+  @apply animate-spin rounded-full h-8 w-8 border-b-2 border-black;
+}
+
+/* 상태 배지 - 블랙/화이트 테마 */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-black;
+}
+
+.status-badge.success {
+  @apply bg-white text-black;
+}
+
+.status-badge.warning {
+  @apply bg-white text-black;
+}
+
+.status-badge.error {
+  @apply bg-white text-black;
+}
+
+.status-badge.info {
+  @apply bg-white text-black;
+}

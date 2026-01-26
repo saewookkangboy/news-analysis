@@ -1,0 +1,196 @@
+/* 기본 스타일 */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 버튼 스타일 - 블랙/화이트 테마 */
+.btn-primary {
+  @apply bg-black hover:bg-gray-900 text-white font-medium py-2 px-4 rounded-lg border border-black transition-colors duration-200;
+}
+
+.btn-secondary {
+  @apply bg-white hover:bg-gray-100 text-black font-medium py-2 px-4 rounded-lg border border-black transition-colors duration-200;
+}
+
+.btn-danger {
+  @apply bg-black hover:bg-gray-900 text-white font-medium py-2 px-4 rounded-lg border border-black transition-colors duration-200;
+}
+
+/* 폼 스타일 - 블랙/화이트 테마 */
+.form-input {
+  @apply w-full px-3 py-2 border border-black rounded-md bg-white text-black focus:outline-none focus:border-black;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-black mb-1;
+}
+
+/* 카드 스타일 - 블랙/화이트 테마 */
+.dashboard-card {
+  @apply bg-white rounded-lg p-6 border border-black;
+}
+
+.chart-container {
+  @apply bg-white rounded-lg p-5 border border-black;
+}
+
+.chart-title {
+  @apply text-base font-semibold text-black mb-4;
+}
+
+/* 상태 배지 - 블랙/화이트 테마 */
+.status-badge {
+  @apply px-2 py-1 text-xs font-medium rounded-full border border-black;
+}
+
+.status-badge.success {
+  @apply bg-white text-black;
+}
+
+.status-badge.warning {
+  @apply bg-white text-black;
+}
+
+.status-badge.error {
+  @apply bg-white text-black;
+}
+
+/* 로딩 스피너 - 블랙/화이트 테마 */
+.loading-spinner {
+  @apply animate-spin rounded-full h-8 w-8 border-b-2 border-black;
+}
+
+/* 테이블 스타일 - 블랙/화이트 테마 */
+.table-container {
+  @apply overflow-x-auto;
+}
+
+.data-table {
+  @apply min-w-full divide-y divide-black;
+}
+
+.data-table thead {
+  @apply bg-white;
+}
+
+.data-table th {
+  @apply px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider border-b border-black;
+}
+
+.data-table td {
+  @apply px-6 py-4 whitespace-nowrap text-sm text-black border-b border-black;
+}
+
+.data-table tbody tr {
+  @apply bg-white hover:bg-white;
+}
+
+.data-table tbody tr:nth-child(even) {
+  @apply bg-white;
+}
+
+/* 네비게이션 스타일 - 블랙/화이트 테마 */
+.nav-link {
+  @apply text-black hover:text-black px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200;
+}
+
+.nav-link.active {
+  @apply bg-black text-white;
+}
+
+/* 메트릭 카드 - 블랙/화이트 테마 */
+.metric-card {
+  @apply bg-white rounded-lg p-5 border border-black;
+}
+
+.metric-value {
+  @apply text-3xl font-bold text-black;
+}
+
+.metric-label {
+  @apply text-sm font-medium text-black;
+}
+
+.metric-change {
+  @apply text-sm font-medium;
+}
+
+.metric-change.positive {
+  @apply text-black;
+}
+
+.metric-change.negative {
+  @apply text-black;
+}
+
+/* 반응형 그리드 */
+.grid-responsive {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6;
+}
+
+/* 모달 스타일 */
+.modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+}
+
+.modal-content {
+  @apply bg-white rounded-lg p-6 w-full max-w-md mx-4;
+}
+
+/* 애니메이션 */
+.fade-in {
+  @apply animate-fade-in;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* 차트 컨테이너 */
+.chart-wrapper {
+  @apply relative w-full h-64;
+}
+
+/* 툴팁 스타일 */
+.tooltip {
+  @apply absolute z-10 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg shadow-lg;
+}
+
+/* 스크롤바 스타일 - 블랙/화이트 테마 */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #000000 #ffffff;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #000000;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #333333;
+}

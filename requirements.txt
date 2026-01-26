@@ -1,0 +1,31 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+mangum==0.17.0
+starlette==0.27.0
+
+# HTTP & Web Scraping
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Data Processing
+pandas==2.1.3
+numpy==1.26.2
+
+# NLP & Korean Language Processing
+sentence-transformers==2.2.2
+
+# AI API
+openai==1.3.0
+google-generativeai==0.3.0
+
+# Utilities
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Development (optional for Vercel)
+pytest==7.4.3
+pytest-asyncio==0.21.1
