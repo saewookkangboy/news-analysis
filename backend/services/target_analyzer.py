@@ -84,17 +84,33 @@ async def analyze_target(
         if has_openai_key:
             if progress_tracker:
                 await progress_tracker.update(10, "OpenAI API로 기본 분석 시작...")
-            logger.info("OpenAI API로 기본 분석 수행 중...")
+            logger.info("=" * 60)
+            logger.info("🚀 OpenAI API 호출 시작")
+            logger.info(f"API 키 확인: ✅ (길이: {len(openai_key)} 문자)")
+            logger.info(f"모델: {settings.OPENAI_MODEL}")
+            logger.info("=" * 60)
             try:
                 result = await _analyze_with_openai(
                     target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
                 )
-                logger.info("✅ OpenAI API 분석 성공")
+                logger.info("=" * 60)
+                logger.info("✅ OpenAI API 분석 성공 완료")
+                logger.info(f"결과 키: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+                logger.info("=" * 60)
+            except ValueError as ve:
+                # API 키 관련 오류는 재시도하지 않음
+                logger.error(f"❌ OpenAI API 키 오류: {ve}", exc_info=True)
+                raise
             except Exception as e:
-                logger.error(f"❌ OpenAI API 호출 실패: {e}", exc_info=True)
+                logger.error("=" * 60)
+                logger.error(f"❌ OpenAI API 호출 실패: {type(e).__name__}: {e}")
+                logger.error(f"상세 오류: {str(e)}")
+                import traceback
+                logger.error(f"스택 트레이스:\n{traceback.format_exc()}")
+                logger.error("=" * 60)
                 # OpenAI 실패 시 Gemini로 재시도
                 if has_gemini_key:
-                    logger.info("Gemini API로 재시도 중...")
+                    logger.info("🔄 Gemini API로 재시도 중...")
                     try:
                         if progress_tracker:
                             await progress_tracker.update(50, "OpenAI 실패, Gemini로 재시도 중...")
@@ -103,7 +119,7 @@ async def analyze_target(
                         )
                         logger.info("✅ Gemini API 분석 성공 (OpenAI 실패 후 재시도)")
                     except Exception as e2:
-                        logger.error(f"❌ Gemini API 재시도도 실패: {e2}", exc_info=True)
+                        logger.error(f"❌ Gemini API 재시도도 실패: {type(e2).__name__}: {e2}", exc_info=True)
                         logger.error("⚠️ 모든 AI API 호출 실패 - 기본 분석 모드로 전환")
                         if progress_tracker:
                             await progress_tracker.update(100, "모든 AI API 실패 - 기본 분석 모드")
@@ -119,7 +135,9 @@ async def analyze_target(
                 try:
                     if progress_tracker:
                         await progress_tracker.update(60, "Gemini API로 결과 보완 중...")
-                    logger.info("Gemini API로 결과 보완 중...")
+                    logger.info("=" * 60)
+                    logger.info("🔄 Gemini API로 결과 보완 시작")
+                    logger.info("=" * 60)
                     gemini_result = await _analyze_with_gemini(
                         target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
                     )
@@ -127,9 +145,15 @@ async def analyze_target(
                     if progress_tracker:
                         await progress_tracker.update(85, "OpenAI + Gemini 결과 통합 중...")
                     result = _merge_analysis_results(result, gemini_result, target_type)
-                    logger.info("OpenAI + Gemini 결과 통합 완료")
+                    logger.info("=" * 60)
+                    logger.info("✅ OpenAI + Gemini 결과 통합 완료")
+                    logger.info("=" * 60)
                 except Exception as e:
-                    logger.warning(f"Gemini API 보완 중 오류 발생 (OpenAI 결과만 사용): {e}")
+                    logger.warning("=" * 60)
+                    logger.warning(f"⚠️ Gemini API 보완 중 오류 발생 (OpenAI 결과만 사용): {type(e).__name__}: {e}")
+                    import traceback
+                    logger.warning(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                    logger.warning("=" * 60)
                     # Gemini 실패해도 OpenAI 결과는 유지
                     if progress_tracker:
                         await progress_tracker.update(90, "Gemini 보완 실패, OpenAI 결과만 사용")
@@ -137,14 +161,28 @@ async def analyze_target(
             # OpenAI가 없고 Gemini만 있는 경우
             if progress_tracker:
                 await progress_tracker.update(10, "Gemini API로 분석 시작...")
-            logger.info("Gemini API로 분석 수행 중...")
+            logger.info("=" * 60)
+            logger.info("🚀 Gemini API 호출 시작 (OpenAI 없음)")
+            logger.info(f"API 키 확인: ✅ (길이: {len(gemini_key)} 문자)")
+            logger.info("=" * 60)
             try:
                 result = await _analyze_with_gemini(
                     target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
                 )
-                logger.info("✅ Gemini API 분석 성공")
+                logger.info("=" * 60)
+                logger.info("✅ Gemini API 분석 성공 완료")
+                logger.info(f"결과 키: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+                logger.info("=" * 60)
+            except ValueError as ve:
+                # API 키 관련 오류는 재시도하지 않음
+                logger.error(f"❌ Gemini API 키 오류: {ve}", exc_info=True)
+                raise
             except Exception as e:
-                logger.error(f"❌ Gemini API 호출 실패: {e}", exc_info=True)
+                logger.error("=" * 60)
+                logger.error(f"❌ Gemini API 호출 실패: {type(e).__name__}: {e}")
+                import traceback
+                logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                logger.error("=" * 60)
                 logger.error("⚠️ Gemini API 실패 - 기본 분석 모드로 전환")
                 if progress_tracker:
                     await progress_tracker.update(100, "Gemini 실패 - 기본 분석 모드")
@@ -160,14 +198,22 @@ async def analyze_target(
         logger.info(f"✅ 타겟 분석 완료: {target_keyword}")
         return result
         
+    except ValueError as ve:
+        # API 키 관련 오류는 그대로 전파
+        logger.error(f"❌ API 키 오류: {ve}")
+        raise
     except Exception as e:
-        logger.error(f"❌ 타겟 분석 중 치명적 오류: {e}", exc_info=True)
+        logger.error("=" * 60)
+        logger.error(f"❌ 타겟 분석 중 치명적 오류: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        logger.error("=" * 60)
         # 예외 발생 시에도 기본 분석 결과라도 반환
-        logger.warning("기본 분석 모드로 fallback 시도")
+        logger.warning("⚠️ 기본 분석 모드로 fallback 시도")
         try:
             return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
         except Exception as e2:
-            logger.error(f"기본 분석 모드도 실패: {e2}")
+            logger.error(f"❌ 기본 분석 모드도 실패: {e2}")
             raise
 
 
@@ -193,7 +239,12 @@ async def _analyze_with_gemini(
             logger.error(f"GEMINI_API_KEY 미설정 - env: {bool(api_key_env)}, settings: {bool(api_key_settings)}")
             raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다.")
         
-        logger.info(f"Gemini API 키 소스: {'환경 변수' if api_key_env else 'Settings'}, 길이: {len(api_key)} 문자")
+        logger.info("=" * 60)
+        logger.info("🚀 Gemini API 호출 시작")
+        logger.info(f"API 키 확인: ✅ (길이: {len(api_key)} 문자)")
+        logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}")
+        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash-preview')}")
+        logger.info("=" * 60)
         
         # 프롬프트 생성
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
@@ -219,6 +270,11 @@ async def _analyze_with_gemini(
             full_prompt = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
+            logger.info("=" * 60)
+            logger.info("📡 Gemini API 요청 전송 중...")
+            logger.info(f"모델: {model_name}")
+            logger.info(f"프롬프트 길이: {len(full_prompt)} 문자")
+            logger.info("=" * 60)
             loop = asyncio.get_event_loop()
             try:
                 # JSON 응답 강제 시도
@@ -232,19 +288,34 @@ async def _analyze_with_gemini(
                         }
                     )
                 )
+                logger.info("=" * 60)
+                logger.info("✅ Gemini API 응답 수신 완료")
+                logger.info("=" * 60)
             except Exception as e:
-                logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
+                logger.warning("=" * 60)
+                logger.warning(f"⚠️ JSON 응답 강제 실패, 일반 모드로 재시도: {type(e).__name__}: {e}")
+                logger.warning("=" * 60)
                 # JSON 응답 강제가 실패하면 일반 모드로 재시도
-                response = await loop.run_in_executor(
-                    None, 
-                    lambda: client.models.generate_content(
-                        model=model_name,
-                        contents=full_prompt
+                try:
+                    response = await loop.run_in_executor(
+                        None, 
+                        lambda: client.models.generate_content(
+                            model=model_name,
+                            contents=full_prompt
+                        )
                     )
-                )
+                    logger.info("✅ 일반 모드로 Gemini API 응답 수신 완료")
+                except Exception as e2:
+                    logger.error("=" * 60)
+                    logger.error(f"❌ Gemini API 일반 모드도 실패: {type(e2).__name__}: {e2}")
+                    import traceback
+                    logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                    logger.error("=" * 60)
+                    raise ValueError(f"Gemini API 호출 실패: {str(e2)}")
             
             # 응답 파싱
             result_text = response.text if hasattr(response, 'text') else str(response)
+            logger.info(f"Gemini 응답 길이: {len(result_text)} 문자")
             
         except ImportError:
             # 새로운 방식이 없으면 기존 방식 시도
@@ -271,15 +342,27 @@ async def _analyze_with_gemini(
                     )
                 )
             except Exception as e:
-                logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
+                logger.warning("=" * 60)
+                logger.warning(f"⚠️ JSON 응답 강제 실패, 일반 모드로 재시도: {type(e).__name__}: {e}")
+                logger.warning("=" * 60)
                 # JSON 응답 강제가 실패하면 일반 모드로 재시도
-                response = await loop.run_in_executor(
-                    None, 
-                    lambda: model.generate_content(full_prompt)
-                )
+                try:
+                    response = await loop.run_in_executor(
+                        None, 
+                        lambda: model.generate_content(full_prompt)
+                    )
+                    logger.info("✅ 일반 모드로 Gemini API 응답 수신 완료")
+                except Exception as e2:
+                    logger.error("=" * 60)
+                    logger.error(f"❌ Gemini API 일반 모드도 실패: {type(e2).__name__}: {e2}")
+                    import traceback
+                    logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                    logger.error("=" * 60)
+                    raise ValueError(f"Gemini API 호출 실패: {str(e2)}")
             
             # 응답 파싱
             result_text = response.text if hasattr(response, 'text') else str(response)
+            logger.info(f"Gemini 응답 길이: {len(result_text)} 문자 (기존 방식)")
         
         if progress_tracker:
             await progress_tracker.update(80, "AI 응답 수신 완료, 결과 파싱 중...")
@@ -347,12 +430,21 @@ async def _analyze_with_gemini(
         return result
         
     except ImportError as e:
-        logger.warning(f"Gemini API 패키지가 설치되지 않았습니다: {e}")
-        logger.warning("'pip install google-genai' 또는 'pip install google-generativeai'를 실행해주세요.")
-        return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+        logger.error("=" * 60)
+        logger.error(f"❌ Gemini API 패키지가 설치되지 않았습니다: {e}")
+        logger.error("'pip install google-genai' 또는 'pip install google-generativeai'를 실행해주세요.")
+        logger.error("=" * 60)
+        raise ValueError(f"Gemini API 패키지 미설치: {e}")
+    except ValueError as ve:
+        # API 키 관련 오류는 그대로 전파
+        raise
     except Exception as e:
-        logger.error(f"Gemini API 호출 실패: {e}")
-        return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+        logger.error("=" * 60)
+        logger.error(f"❌ Gemini API 호출 실패: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        logger.error("=" * 60)
+        raise ValueError(f"Gemini API 호출 실패: {str(e)}")
 
 
 async def _analyze_with_openai(
@@ -393,7 +485,11 @@ async def _analyze_with_openai(
             await progress_tracker.update(30, "OpenAI API 요청 전송 중...")
         
         # API 호출
-        logger.info("OpenAI API 요청 전송 중...")
+        logger.info("=" * 60)
+        logger.info("📡 OpenAI API 요청 전송 중...")
+        logger.info(f"모델: {settings.OPENAI_MODEL}")
+        logger.info(f"프롬프트 길이: {len(prompt)} 문자")
+        logger.info("=" * 60)
         try:
             response = await client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
@@ -404,9 +500,17 @@ async def _analyze_with_openai(
                 temperature=0.7,
                 response_format={"type": "json_object"}  # JSON 응답 강제
             )
-            logger.info("OpenAI API 응답 수신 완료")
+            logger.info("=" * 60)
+            logger.info("✅ OpenAI API 응답 수신 완료")
+            logger.info(f"응답 ID: {response.id if hasattr(response, 'id') else 'N/A'}")
+            logger.info(f"사용된 토큰: {response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'}")
+            logger.info("=" * 60)
         except Exception as api_error:
-            logger.error(f"OpenAI API 호출 중 오류 발생: {api_error}", exc_info=True)
+            logger.error("=" * 60)
+            logger.error(f"❌ OpenAI API 호출 중 오류 발생: {type(api_error).__name__}: {api_error}")
+            import traceback
+            logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+            logger.error("=" * 60)
             raise ValueError(f"OpenAI API 호출 실패: {str(api_error)}")
         
         result_text = response.choices[0].message.content
@@ -511,12 +615,22 @@ async def _analyze_with_openai(
         
         return result
         
-    except ImportError:
-        logger.warning("openai 패키지가 설치되지 않았습니다.")
-        return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+    except ImportError as ie:
+        logger.error("=" * 60)
+        logger.error(f"❌ OpenAI 패키지가 설치되지 않았습니다: {ie}")
+        logger.error("'pip install openai'를 실행해주세요.")
+        logger.error("=" * 60)
+        raise ValueError(f"OpenAI 패키지 미설치: {ie}")
+    except ValueError as ve:
+        # API 키 관련 오류는 그대로 전파
+        raise
     except Exception as e:
-        logger.error(f"OpenAI API 호출 실패: {e}")
-        return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+        logger.error("=" * 60)
+        logger.error(f"❌ OpenAI API 호출 실패: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        logger.error("=" * 60)
+        raise ValueError(f"OpenAI API 호출 실패: {str(e)}")
 
 
 def _analyze_basic(
