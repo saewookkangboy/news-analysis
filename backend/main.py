@@ -712,7 +712,13 @@ async def root():
                         }
                     }, 2000); // 2초마다 다음 단계로
                     
-                    const response = await fetch('/api/target/analyze', {
+                    // API URL 설정 (배포 환경 자동 감지)
+                    const apiBaseUrl = window.location.origin;
+                    const apiUrl = `${apiBaseUrl}/api/target/analyze`;
+                    
+                    console.log('API 호출:', apiUrl, formData);
+                    
+                    const response = await fetch(apiUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -722,12 +728,21 @@ async def root():
                     
                     clearInterval(progressInterval);
                     
+                    console.log('API 응답 상태:', response.status, response.statusText);
+                    
                     if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || '분석 요청 실패');
+                        let errorData = {};
+                        try {
+                            errorData = await response.json();
+                        } catch (e) {
+                            errorData = { detail: await response.text() || '분석 요청 실패' };
+                        }
+                        console.error('API 오류:', errorData);
+                        throw new Error(errorData.detail || errorData.error || errorData.message || '분석 요청 실패');
                     }
                     
                     const data = await response.json();
+                    console.log('API 응답 데이터:', data);
                     
                     // 최종 진행률 업데이트 (이미 선언된 변수 사용)
                     if (progressBar) {

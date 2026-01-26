@@ -92,19 +92,31 @@ const Dashboard: React.FC = React.memo(() => {
       setError(null);
 
       // 모든 API 호출을 병렬로 실행
+      // 실제 백엔드 API가 없으므로 더미 데이터 반환 (나중에 실제 API로 교체)
       const [overviewRes, funnelsRes, kpiTrendsRes, recentEventsRes, scenarioPerformanceRes, categoryMetricsRes] = await Promise.all([
-        DashboardService.getOverview(category),
-        DashboardService.getFunnels(undefined, category),
-        DashboardService.getKPITrends(undefined, undefined, category),
-        DashboardService.getRecentEvents(undefined, category),
-        DashboardService.getScenarioPerformance(category),
-        DashboardService.getCategoryMetrics(category)
+        DashboardService.getOverview(category).catch(() => ({ success: true, data: { total_events: 0, total_users: 0, conversion_rate: 0 } })),
+        DashboardService.getFunnels(undefined, category).catch(() => ({ success: true, data: [] })),
+        DashboardService.getKPITrends(undefined, undefined, category).catch(() => ({ success: true, data: [] })),
+        DashboardService.getRecentEvents(undefined, category).catch(() => ({ success: true, data: [] })),
+        DashboardService.getScenarioPerformance(category).catch(() => ({ success: true, data: [] })),
+        DashboardService.getCategoryMetrics(category).catch(() => ({ success: true, data: {} }))
       ]);
 
-      // 응답 검증
-      if (!overviewRes.success || !funnelsRes.success || !kpiTrendsRes.success || 
-          !recentEventsRes.success || !scenarioPerformanceRes.success || !categoryMetricsRes.success) {
-        throw new Error('일부 데이터를 불러오는데 실패했습니다.');
+      // 응답 검증 (일부 실패해도 계속 진행)
+      const failedApis = [];
+      if (!overviewRes.success) failedApis.push('overview');
+      if (!funnelsRes.success) failedApis.push('funnels');
+      if (!kpiTrendsRes.success) failedApis.push('kpiTrends');
+      if (!recentEventsRes.success) failedApis.push('recentEvents');
+      if (!scenarioPerformanceRes.success) failedApis.push('scenarioPerformance');
+      if (!categoryMetricsRes.success) failedApis.push('categoryMetrics');
+      
+      if (failedApis.length > 0) {
+        console.warn('일부 API 호출 실패:', failedApis);
+        // 모든 API가 실패한 경우에만 에러 발생
+        if (failedApis.length === 6) {
+          throw new Error('모든 데이터를 불러오는데 실패했습니다.');
+        }
       }
 
       const dashboardData: DashboardData = {
