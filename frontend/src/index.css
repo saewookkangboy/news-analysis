@@ -4,6 +4,11 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ============================================
+   최종 디자인 템플릿 - 블랙/화이트 미니멀 테마
+   ============================================ */
+
+/* 기본 스타일 */
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -20,7 +25,7 @@ code {
     monospace;
 }
 
-/* 커스텀 스크롤바 - 블랙/화이트 테마 */
+/* 스크롤바 - 블랙/화이트 테마 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -63,18 +68,6 @@ code {
 }
 
 /* 애니메이션 */
-.fade-in {
-  animation: fadeIn 0.5s ease-in-out;
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-in-out;
-}
-
-.slide-up {
-  animation: slideUp 0.3s ease-out;
-}
-
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -97,7 +90,19 @@ code {
   }
 }
 
-/* 대시보드 카드 스타일 - 블랙/화이트 테마 */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* 카드 스타일 - 블랙/화이트 테마 */
 .dashboard-card {
   @apply bg-white rounded-lg border border-black p-6 transition-all duration-200;
 }
@@ -106,7 +111,7 @@ code {
   @apply border-black;
 }
 
-/* 메트릭 카드 - 블랙/화이트 테마 */
+/* 메트릭 카드 */
 .metric-card {
   @apply dashboard-card text-center;
 }
@@ -120,18 +125,10 @@ code {
 }
 
 .metric-change {
-  @apply text-xs font-medium;
+  @apply text-xs font-medium text-black;
 }
 
-.metric-change.positive {
-  @apply text-black;
-}
-
-.metric-change.negative {
-  @apply text-black;
-}
-
-/* 차트 컨테이너 - 블랙/화이트 테마 */
+/* 차트 컨테이너 */
 .chart-container {
   @apply dashboard-card;
 }
@@ -140,7 +137,11 @@ code {
   @apply text-lg font-semibold text-black mb-4;
 }
 
-/* 퍼널 차트 - 블랙/화이트 테마 */
+.chart-wrapper {
+  @apply relative w-full h-64;
+}
+
+/* 퍼널 차트 */
 .funnel-stage {
   @apply flex items-center justify-between p-4 bg-white border border-black rounded-lg mb-3;
 }
@@ -157,7 +158,7 @@ code {
   @apply text-sm text-black;
 }
 
-/* 테이블 스타일 - 블랙/화이트 테마 */
+/* 테이블 스타일 */
 .data-table {
   @apply w-full border-collapse;
 }
@@ -170,13 +171,21 @@ code {
   @apply px-6 py-4 whitespace-nowrap text-sm text-black border-b border-black;
 }
 
-.data-table tr:hover {
+.data-table tbody tr {
   @apply bg-white;
 }
 
-/* 버튼 스타일 - 블랙/화이트 테마 */
+.data-table tbody tr:hover {
+  @apply bg-white;
+}
+
+.table-container {
+  @apply overflow-x-auto;
+}
+
+/* 버튼 스타일 */
 .btn {
-  @apply inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md focus:outline-none transition-colors duration-200;
+  @apply inline-flex items-center px-4 py-2 border text-sm font-medium rounded-lg focus:outline-none transition-colors duration-200;
 }
 
 .btn-primary {
@@ -184,7 +193,7 @@ code {
 }
 
 .btn-secondary {
-  @apply btn bg-white text-black border-black hover:bg-gray-100;
+  @apply btn bg-white text-black border-black hover:bg-black hover:text-white;
 }
 
 .btn-success {
@@ -195,7 +204,7 @@ code {
   @apply btn bg-black text-white border-black hover:bg-gray-900;
 }
 
-/* 폼 스타일 - 블랙/화이트 테마 */
+/* 폼 스타일 */
 .form-input {
   @apply block w-full px-3 py-2 border border-black rounded-md bg-white text-black placeholder-gray-500 focus:outline-none focus:border-black sm:text-sm;
 }
@@ -208,28 +217,40 @@ code {
   @apply mt-1 text-sm text-black;
 }
 
-/* 로딩 스피너 - 블랙/화이트 테마 */
+/* 로딩 스피너 */
 .loading-spinner {
   @apply animate-spin rounded-full h-8 w-8 border-b-2 border-black;
 }
 
-/* 상태 배지 - 블랙/화이트 테마 */
+/* 상태 배지 */
 .status-badge {
-  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-black;
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-black bg-white text-black;
 }
 
-.status-badge.success {
-  @apply bg-white text-black;
+/* 네비게이션 */
+.nav-link {
+  @apply text-black hover:text-black px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200;
 }
 
-.status-badge.warning {
-  @apply bg-white text-black;
+.nav-link.active {
+  @apply bg-black text-white;
 }
 
-.status-badge.error {
-  @apply bg-white text-black;
+/* 반응형 그리드 */
+.grid-responsive {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6;
 }
 
-.status-badge.info {
-  @apply bg-white text-black;
+/* 모달 스타일 */
+.modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+}
+
+.modal-content {
+  @apply bg-white rounded-lg p-6 w-full max-w-md mx-4 border border-black;
+}
+
+/* 툴팁 스타일 */
+.tooltip {
+  @apply absolute z-10 px-3 py-2 text-sm text-white bg-black rounded-lg;
 }

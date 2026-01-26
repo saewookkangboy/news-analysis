@@ -61,23 +61,55 @@ async def _analyze_with_gemini(
     """Gemini API를 사용한 분석"""
     try:
         import asyncio
-        import google.generativeai as genai
-        
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        import os
         
         # 프롬프트 생성
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context)
         
-        # API 호출 (비동기 실행을 위해 run_in_executor 사용)
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, 
-            lambda: model.generate_content(prompt)
-        )
+        # 모델 설정 (기본값: gemini-2.5-flash-preview)
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash-preview')
         
-        # 응답 파싱
-        result_text = response.text if hasattr(response, 'text') else str(response)
+        # 새로운 Gemini API 방식 시도 (from google import genai)
+        try:
+            from google import genai
+            
+            # API 키 설정 (환경 변수 또는 설정에서)
+            api_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+            if api_key:
+                client = genai.Client(api_key=api_key)
+            else:
+                # 환경 변수에서 자동으로 가져오기
+                client = genai.Client()
+            
+            # API 호출 (비동기 실행을 위해 run_in_executor 사용)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, 
+                lambda: client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+            )
+            
+            # 응답 파싱
+            result_text = response.text if hasattr(response, 'text') else str(response)
+            
+        except ImportError:
+            # 새로운 방식이 없으면 기존 방식 시도
+            import google.generativeai as genai_old
+            
+            genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
+            model = genai_old.GenerativeModel(model_name)
+            
+            # API 호출 (비동기 실행을 위해 run_in_executor 사용)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, 
+                lambda: model.generate_content(prompt)
+            )
+            
+            # 응답 파싱
+            result_text = response.text if hasattr(response, 'text') else str(response)
         
         # JSON 형식으로 파싱 시도
         try:
@@ -92,8 +124,9 @@ async def _analyze_with_gemini(
         
         return result
         
-    except ImportError:
-        logger.warning("google-generativeai 패키지가 설치되지 않았습니다.")
+    except ImportError as e:
+        logger.warning(f"Gemini API 패키지가 설치되지 않았습니다: {e}")
+        logger.warning("'pip install google-genai' 또는 'pip install google-generativeai'를 실행해주세요.")
         return _analyze_basic(target_keyword, target_type, additional_context)
     except Exception as e:
         logger.error(f"Gemini API 호출 실패: {e}")

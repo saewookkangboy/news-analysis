@@ -1,3 +1,7 @@
+/* ============================================
+   최종 디자인 템플릿 - App 컴포넌트 스타일
+   ============================================ */
+
 /* 기본 스타일 */
 body {
   margin: 0;
@@ -14,7 +18,7 @@ body {
 }
 
 .btn-secondary {
-  @apply bg-white hover:bg-gray-100 text-black font-medium py-2 px-4 rounded-lg border border-black transition-colors duration-200;
+  @apply bg-white hover:bg-black hover:text-white text-black font-medium py-2 px-4 rounded-lg border border-black transition-colors duration-200;
 }
 
 .btn-danger {
@@ -45,19 +49,7 @@ body {
 
 /* 상태 배지 - 블랙/화이트 테마 */
 .status-badge {
-  @apply px-2 py-1 text-xs font-medium rounded-full border border-black;
-}
-
-.status-badge.success {
-  @apply bg-white text-black;
-}
-
-.status-badge.warning {
-  @apply bg-white text-black;
-}
-
-.status-badge.error {
-  @apply bg-white text-black;
+  @apply px-2 py-1 text-xs font-medium rounded-full border border-black bg-white text-black;
 }
 
 /* 로딩 스피너 - 블랙/화이트 테마 */
@@ -94,15 +86,6 @@ body {
   @apply bg-white;
 }
 
-/* 네비게이션 스타일 - 블랙/화이트 테마 */
-.nav-link {
-  @apply text-black hover:text-black px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200;
-}
-
-.nav-link.active {
-  @apply bg-black text-white;
-}
-
 /* 메트릭 카드 - 블랙/화이트 테마 */
 .metric-card {
   @apply bg-white rounded-lg p-5 border border-black;
@@ -117,29 +100,12 @@ body {
 }
 
 .metric-change {
-  @apply text-sm font-medium;
-}
-
-.metric-change.positive {
-  @apply text-black;
-}
-
-.metric-change.negative {
-  @apply text-black;
+  @apply text-sm font-medium text-black;
 }
 
 /* 반응형 그리드 */
 .grid-responsive {
   @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6;
-}
-
-/* 모달 스타일 */
-.modal-overlay {
-  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
-}
-
-.modal-content {
-  @apply bg-white rounded-lg p-6 w-full max-w-md mx-4;
 }
 
 /* 애니메이션 */
@@ -169,28 +135,5 @@ body {
 
 /* 툴팁 스타일 */
 .tooltip {
-  @apply absolute z-10 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg shadow-lg;
-}
-
-/* 스크롤바 스타일 - 블랙/화이트 테마 */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #000000 #ffffff;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: #ffffff;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #000000;
-  border-radius: 3px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: #333333;
+  @apply absolute z-10 px-3 py-2 text-sm text-white bg-black rounded-lg;
 }

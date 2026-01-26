@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash-preview"  # 최신 모델 사용
     
     # 크롤링 설정
     CRAWL_DELAY: float = 1.0  # 초 단위
