@@ -34,11 +34,17 @@ async def recommend_keywords(
     try:
         logger.info(f"키워드 추천 시작: {target_keyword} (유형: {recommendation_type})")
         
-        if use_gemini and settings.GEMINI_API_KEY:
+        # API 키 확인 (환경 변수에서 직접 확인 - Vercel 호환성)
+        import os
+        from backend.config import settings
+        gemini_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+        openai_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        
+        if use_gemini and gemini_key:
             result = await _recommend_with_gemini(
                 target_keyword, recommendation_type, max_results, additional_context
             )
-        elif settings.OPENAI_API_KEY:
+        elif openai_key:
             result = await _recommend_with_openai(
                 target_keyword, recommendation_type, max_results, additional_context
             )
@@ -117,8 +123,14 @@ async def _recommend_with_openai(
     """OpenAI API를 사용한 키워드 추천"""
     try:
         from openai import AsyncOpenAI
+        import os
         
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
+        api_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        client = AsyncOpenAI(api_key=api_key)
         prompt = _build_recommendation_prompt(
             target_keyword, recommendation_type, max_results, additional_context
         )

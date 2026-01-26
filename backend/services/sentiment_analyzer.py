@@ -31,9 +31,15 @@ async def analyze_sentiment(
     try:
         logger.info(f"감정 분석 시작: {target_keyword}")
         
-        if use_gemini and settings.GEMINI_API_KEY:
+        # API 키 확인 (환경 변수에서 직접 확인 - Vercel 호환성)
+        import os
+        from backend.config import settings
+        gemini_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+        openai_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        
+        if use_gemini and gemini_key:
             result = await _analyze_sentiment_with_gemini(target_keyword, additional_context)
-        elif settings.OPENAI_API_KEY:
+        elif openai_key:
             result = await _analyze_sentiment_with_openai(target_keyword, additional_context)
         else:
             result = _analyze_sentiment_basic(target_keyword, additional_context)
@@ -65,9 +71,15 @@ async def analyze_context(
     try:
         logger.info(f"맥락 분석 시작: {target_keyword}")
         
-        if use_gemini and settings.GEMINI_API_KEY:
+        # API 키 확인 (환경 변수에서 직접 확인 - Vercel 호환성)
+        import os
+        from backend.config import settings
+        gemini_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+        openai_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        
+        if use_gemini and gemini_key:
             result = await _analyze_context_with_gemini(target_keyword, additional_context)
-        elif settings.OPENAI_API_KEY:
+        elif openai_key:
             result = await _analyze_context_with_openai(target_keyword, additional_context)
         else:
             result = _analyze_context_basic(target_keyword, additional_context)
@@ -99,9 +111,15 @@ async def analyze_tone(
     try:
         logger.info(f"톤 분석 시작: {target_keyword}")
         
-        if use_gemini and settings.GEMINI_API_KEY:
+        # API 키 확인 (환경 변수에서 직접 확인 - Vercel 호환성)
+        import os
+        from backend.config import settings
+        gemini_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+        openai_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        
+        if use_gemini and gemini_key:
             result = await _analyze_tone_with_gemini(target_keyword, additional_context)
-        elif settings.OPENAI_API_KEY:
+        elif openai_key:
             result = await _analyze_tone_with_openai(target_keyword, additional_context)
         else:
             result = _analyze_tone_basic(target_keyword, additional_context)
@@ -172,8 +190,14 @@ async def _analyze_sentiment_with_openai(
     """OpenAI API를 사용한 감정 분석"""
     try:
         from openai import AsyncOpenAI
+        import os
         
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
+        api_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        client = AsyncOpenAI(api_key=api_key)
         prompt = _build_sentiment_prompt(target_keyword, additional_context)
         
         response = await client.chat.completions.create(
@@ -259,8 +283,14 @@ async def _analyze_context_with_openai(
     """OpenAI API를 사용한 맥락 분석"""
     try:
         from openai import AsyncOpenAI
+        import os
         
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
+        api_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        client = AsyncOpenAI(api_key=api_key)
         prompt = _build_context_prompt(target_keyword, additional_context)
         
         response = await client.chat.completions.create(
@@ -346,8 +376,14 @@ async def _analyze_tone_with_openai(
     """OpenAI API를 사용한 톤 분석"""
     try:
         from openai import AsyncOpenAI
+        import os
         
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
+        api_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        client = AsyncOpenAI(api_key=api_key)
         prompt = _build_tone_prompt(target_keyword, additional_context)
         
         response = await client.chat.completions.create(

@@ -39,9 +39,11 @@ async def analyze_target(
     try:
         logger.info(f"타겟 분석 시작: {target_keyword} (타입: {target_type}, Gemini 보완: {use_gemini})")
         
-        # API 키 상태 확인 및 로깅
-        has_openai_key = bool(settings.OPENAI_API_KEY)
-        has_gemini_key = bool(settings.GEMINI_API_KEY)
+        # API 키 상태 확인 및 로깅 (환경 변수에서 직접 확인 - Vercel 호환성)
+        openai_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        gemini_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+        has_openai_key = bool(openai_key)
+        has_gemini_key = bool(gemini_key)
         logger.info(f"API 키 상태 - OpenAI: {'설정됨' if has_openai_key else '미설정'}, Gemini: {'설정됨' if has_gemini_key else '미설정'}")
         
         if not has_openai_key and not has_gemini_key:
@@ -64,7 +66,7 @@ async def analyze_target(
             except Exception as e:
                 logger.error(f"❌ OpenAI API 호출 실패: {e}", exc_info=True)
                 # OpenAI 실패 시 Gemini로 재시도
-                if has_gemini_key:
+                if gemini_key:
                     logger.info("Gemini API로 재시도 중...")
                     try:
                         if progress_tracker:
@@ -86,7 +88,7 @@ async def analyze_target(
                     return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
             
             # Gemini API가 선택되고 사용 가능한 경우, OpenAI 결과를 보완
-            if use_gemini and settings.GEMINI_API_KEY:
+            if use_gemini and gemini_key:
                 try:
                     if progress_tracker:
                         await progress_tracker.update(60, "Gemini API로 결과 보완 중...")
@@ -155,8 +157,9 @@ async def _analyze_with_gemini(
         import asyncio
         import os
         
-        # API 키 확인
-        if not settings.GEMINI_API_KEY:
+        # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
+        api_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+        if not api_key:
             raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다.")
         
         # 프롬프트 생성
@@ -331,12 +334,13 @@ async def _analyze_with_openai(
     try:
         from openai import AsyncOpenAI
         
-        # API 키 확인
-        if not settings.OPENAI_API_KEY:
+        # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
+        api_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+        if not api_key:
             raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
         
         logger.info(f"OpenAI API 클라이언트 초기화 중... (모델: {settings.OPENAI_MODEL})")
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        client = AsyncOpenAI(api_key=api_key)
         
         # 프롬프트 생성
         if progress_tracker:
@@ -495,9 +499,14 @@ def _analyze_basic(
         period_note = f" (종료일: {end_date})"
     
     # MECE 구조로 기본 분석 결과 반환
+    # API 키 상태 확인 (환경 변수에서 직접 확인 - Vercel 호환성)
+    import os
+    openai_key = settings.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
+    gemini_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+    
     api_key_status = {
-        "openai_configured": bool(settings.OPENAI_API_KEY),
-        "gemini_configured": bool(settings.GEMINI_API_KEY),
+        "openai_configured": bool(openai_key),
+        "gemini_configured": bool(gemini_key),
         "message": "⚠️ AI API 키가 설정되지 않아 기본 분석 모드로 실행되었습니다."
     }
     
