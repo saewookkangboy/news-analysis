@@ -1687,7 +1687,7 @@ async def root():
                                     resultText += `### 의미적 관련 키워드\\n\\n`;
                                     recs.semantic_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
-                                        const score = kw.score ? ` (점수: ${kw.score})` : '';
+                                        const score = kw.score ? ' (점수: ' + kw.score + ')' : '';
                                         resultText += `${idx + 1}. ${keyword}${score}\\n`;
                                     });
                                     resultText += `\\n`;
