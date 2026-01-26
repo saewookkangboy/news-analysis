@@ -24,8 +24,12 @@ from backend.middleware.cache_middleware import CacheMiddleware
 # 로깅 설정
 logger = logging.getLogger(__name__)
 
+import os
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+
 handlers = [logging.StreamHandler()]
-if settings.LOG_FILE:
+# Vercel 환경에서는 파일 로깅 비활성화
+if settings.LOG_FILE and not IS_VERCEL:
     try:
         # 로그 디렉토리 생성
         log_path = Path(settings.LOG_FILE)
@@ -674,23 +678,34 @@ async def health_check():
         "service": "news-trend-analyzer"
     }
 
-# 정적 파일 서빙 (워드 클라우드 이미지)
-app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
-
-# 프론트엔드 정적 파일 서빙 (빌드된 파일이 있는 경우에만)
-# 프론트엔드는 /app 경로로 마운트하여 루트 경로와 충돌 방지
-frontend_dir = BASE_DIR / "frontend"
-frontend_build_dir = frontend_dir / "build"  # React 빌드 디렉토리
-frontend_dist_dir = frontend_dir / "dist"  # Vite/기타 빌드 디렉토리
-
-# 빌드된 정적 파일이 있는 경우에만 마운트
-if frontend_build_dir.exists() and any(frontend_build_dir.iterdir()):
-    app.mount("/app", StaticFiles(directory=str(frontend_build_dir), html=True), name="frontend")
-elif frontend_dist_dir.exists() and any(frontend_dist_dir.iterdir()):
-    app.mount("/app", StaticFiles(directory=str(frontend_dist_dir), html=True), name="frontend")
-elif frontend_dir.exists():
-    # 빌드 디렉토리가 없지만 frontend 디렉토리가 있으면 src를 서빙 (개발용)
-    logger.info("프론트엔드 빌드 파일이 없습니다. 빌드 후 /app 경로에서 접근 가능합니다.")
+# 정적 파일 서빙 (Vercel 환경에서는 건너뛰기)
+if not IS_VERCEL:
+    try:
+        # 정적 파일 서빙 (워드 클라우드 이미지)
+        if ASSETS_DIR.exists():
+            app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+    except Exception as e:
+        logger.warning(f"정적 파일 마운트 실패: {e}")
+    
+    # 프론트엔드 정적 파일 서빙 (빌드된 파일이 있는 경우에만)
+    # 프론트엔드는 /app 경로로 마운트하여 루트 경로와 충돌 방지
+    try:
+        frontend_dir = BASE_DIR / "frontend"
+        frontend_build_dir = frontend_dir / "build"  # React 빌드 디렉토리
+        frontend_dist_dir = frontend_dir / "dist"  # Vite/기타 빌드 디렉토리
+        
+        # 빌드된 정적 파일이 있는 경우에만 마운트
+        if frontend_build_dir.exists() and any(frontend_build_dir.iterdir()):
+            app.mount("/app", StaticFiles(directory=str(frontend_build_dir), html=True), name="frontend")
+        elif frontend_dist_dir.exists() and any(frontend_dist_dir.iterdir()):
+            app.mount("/app", StaticFiles(directory=str(frontend_dist_dir), html=True), name="frontend")
+        elif frontend_dir.exists():
+            # 빌드 디렉토리가 없지만 frontend 디렉토리가 있으면 src를 서빙 (개발용)
+            logger.info("프론트엔드 빌드 파일이 없습니다. 빌드 후 /app 경로에서 접근 가능합니다.")
+    except Exception as e:
+        logger.warning(f"프론트엔드 마운트 실패: {e}")
+else:
+    logger.info("Vercel 환경: 정적 파일 마운트를 건너뜁니다.")
 
 
 @app.on_event("startup")

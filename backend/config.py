@@ -69,9 +69,15 @@ CACHE_DIR = DATA_DIR / "cache"
 ASSETS_DIR = BASE_DIR / "frontend" / "assets"
 LOGS_DIR = BASE_DIR / "logs"
 
-# 필요한 디렉토리 생성
-for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, ASSETS_DIR, LOGS_DIR]:
-    directory.mkdir(parents=True, exist_ok=True)
+# 필요한 디렉토리 생성 (Vercel 환경에서는 건너뛰기)
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+if not IS_VERCEL:
+    for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, ASSETS_DIR, LOGS_DIR]:
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            # 디렉토리 생성 실패해도 계속 진행
+            pass
 
 # 로그 파일 경로 설정 (디렉토리 생성 후)
 if not settings.LOG_FILE:
