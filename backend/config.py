@@ -55,6 +55,8 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        # Vercel 환경에서는 환경 변수를 자동으로 로딩
+        # .env 파일은 로컬 개발 환경에서만 사용
 
 
 # 전역 설정 인스턴스

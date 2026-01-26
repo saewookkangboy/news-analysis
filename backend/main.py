@@ -1843,6 +1843,24 @@ async def startup_event():
     logger.info("뉴스 트렌드 분석 서비스 시작")
     logger.info(f"서버 설정: {settings.HOST}:{settings.PORT}")
     logger.info(f"디버그 모드: {settings.DEBUG}")
+    
+    # API 키 상태 로깅 (Vercel 배포 시 확인용)
+    import os
+    is_vercel = os.getenv("VERCEL") == "1"
+    logger.info("=" * 60)
+    logger.info("환경 변수 로딩 상태 확인")
+    logger.info(f"환경: {'Vercel (배포)' if is_vercel else '로컬 개발'}")
+    logger.info(f"OPENAI_API_KEY: {'✅ 설정됨' if settings.OPENAI_API_KEY else '❌ 미설정'}")
+    if settings.OPENAI_API_KEY:
+        logger.info(f"  - 길이: {len(settings.OPENAI_API_KEY)} 문자")
+        logger.info(f"  - 시작: {settings.OPENAI_API_KEY[:10]}...")
+    logger.info(f"GEMINI_API_KEY: {'✅ 설정됨' if settings.GEMINI_API_KEY else '❌ 미설정'}")
+    if settings.GEMINI_API_KEY:
+        logger.info(f"  - 길이: {len(settings.GEMINI_API_KEY)} 문자")
+        logger.info(f"  - 시작: {settings.GEMINI_API_KEY[:10]}...")
+    logger.info(f"OPENAI_MODEL: {settings.OPENAI_MODEL}")
+    logger.info(f"GEMINI_MODEL: {settings.GEMINI_MODEL}")
+    logger.info("=" * 60)
 
 
 @app.on_event("shutdown")
