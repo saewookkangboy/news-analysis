@@ -213,18 +213,21 @@ code {
   @apply text-3xl font-bold text-black mb-2;
   letter-spacing: -1.04px;
   line-height: 2rem;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 .metric-label {
   @apply text-sm font-medium text-black;
   letter-spacing: -0.42px;
   line-height: 1.25rem;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 .metric-change {
   @apply text-xs font-medium text-black;
   letter-spacing: -0.36px;
   line-height: 1rem;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 /* 차트 컨테이너 - 개선된 스타일 */
@@ -236,6 +239,7 @@ code {
   @apply text-lg font-semibold text-black mb-4;
   letter-spacing: -0.72px;
   line-height: 1.75rem;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 .chart-wrapper {
@@ -262,14 +266,19 @@ code {
 /* 테이블 스타일 */
 .data-table {
   @apply w-full border-collapse;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 .data-table th {
   @apply bg-white text-left text-xs font-medium text-black uppercase tracking-wider px-6 py-3 border-b border-black;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
+  letter-spacing: -0.36px;
 }
 
 .data-table td {
   @apply px-6 py-4 whitespace-nowrap text-sm text-black border-b border-black;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
+  letter-spacing: -0.42px;
 }
 
 .data-table tbody tr {
@@ -289,6 +298,7 @@ code {
   @apply inline-flex items-center px-4 py-2 border text-sm font-medium rounded-lg focus:outline-none transition-all duration-200;
   letter-spacing: -0.42px;
   line-height: 1.25rem;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 .btn-primary {
@@ -323,6 +333,7 @@ code {
   letter-spacing: -0.42px;
   line-height: 1.25rem;
   transition: all 0.2s ease;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 .form-input:focus {
@@ -334,6 +345,7 @@ code {
   @apply block text-sm font-medium text-black mb-1;
   letter-spacing: -0.42px;
   line-height: 1.25rem;
+  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
 }
 
 .form-error {

@@ -25,7 +25,7 @@ const Navigation: React.FC = () => {
         <div className="flex justify-between items-center h-16">
           {/* 로고 */}
           <div className="flex items-center">
-            <h1 className="text-xl font-semibold text-black tracking-tight">
+            <h1 className="text-xl font-semibold text-black tracking-tight ibm-plex-sans-kr-semibold" style={{ letterSpacing: '-0.8px' }}>
               고객 행동 분석
             </h1>
           </div>
@@ -39,7 +39,7 @@ const Navigation: React.FC = () => {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ibm-plex-sans-kr-medium ${
                       isActive
                         ? 'bg-black text-white scale-105'
                         : 'text-black hover:bg-black hover:text-white hover:scale-105'

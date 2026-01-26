@@ -191,10 +191,10 @@ const Dashboard: React.FC = React.memo(() => {
         <div className="space-y-6 max-w-7xl mx-auto">
           {/* 페이지 헤더 */}
           <div className="mb-6 animate-fade-in">
-            <h1 className="text-2xl font-semibold text-black mb-1 tracking-tight" style={{ letterSpacing: '-1.04px' }}>
+            <h1 className="text-2xl font-semibold text-black mb-1 tracking-tight ibm-plex-sans-kr-bold" style={{ letterSpacing: '-1.04px' }}>
               분석 결과
             </h1>
-            <p className="text-sm text-black" style={{ letterSpacing: '-0.42px' }}>
+            <p className="text-sm text-black ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.42px' }}>
               {categoryTitle} 고객 여정과 퍼널 분석을 통한 실시간 인사이트
             </p>
           </div>
@@ -303,13 +303,13 @@ const Dashboard: React.FC = React.memo(() => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 퍼널 차트 */}
             <div className="chart-container">
-              <h3 className="chart-title">{categoryTitle} 고객 여정 퍼널</h3>
+              <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 고객 여정 퍼널</h3>
               <FunnelChart data={dashboardData.funnels} />
             </div>
 
             {/* KPI 트렌드 */}
             <div className="chart-container">
-              <h3 className="chart-title">{categoryTitle} 전환율 트렌드</h3>
+              <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 전환율 트렌드</h3>
               <KPITrendChart data={dashboardData.kpi_trends} />
             </div>
           </div>
@@ -318,13 +318,13 @@ const Dashboard: React.FC = React.memo(() => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 시나리오 성과 비교 */}
             <div className="chart-container">
-              <h3 className="chart-title">{categoryTitle} 시나리오별 성과</h3>
+              <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 시나리오별 성과</h3>
               <ScenarioComparisonChart data={dashboardData.scenario_performance} />
             </div>
 
             {/* 최근 이벤트 */}
             <div className="chart-container">
-              <h3 className="chart-title">{categoryTitle} 최근 사용자 이벤트</h3>
+              <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 최근 사용자 이벤트</h3>
               <RecentEventsTable events={dashboardData.recent_events} />
             </div>
           </div>
