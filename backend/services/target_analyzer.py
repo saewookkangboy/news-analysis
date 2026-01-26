@@ -39,14 +39,51 @@ async def analyze_target(
     try:
         logger.info(f"타겟 분석 시작: {target_keyword} (타입: {target_type}, Gemini 보완: {use_gemini})")
         
+        # API 키 상태 확인 및 로깅
+        has_openai_key = bool(settings.OPENAI_API_KEY)
+        has_gemini_key = bool(settings.GEMINI_API_KEY)
+        logger.info(f"API 키 상태 - OpenAI: {'설정됨' if has_openai_key else '미설정'}, Gemini: {'설정됨' if has_gemini_key else '미설정'}")
+        
+        if not has_openai_key and not has_gemini_key:
+            logger.error("⚠️ AI API 키가 설정되지 않았습니다! 기본 분석 모드로 전환됩니다.")
+            logger.error("환경 변수 OPENAI_API_KEY 또는 GEMINI_API_KEY를 설정해주세요.")
+            if progress_tracker:
+                await progress_tracker.update(100, "AI API 키 미설정 - 기본 분석 모드")
+            return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+        
         # 기본적으로 OpenAI API 사용
-        if settings.OPENAI_API_KEY:
+        if has_openai_key:
             if progress_tracker:
                 await progress_tracker.update(10, "OpenAI API로 기본 분석 시작...")
             logger.info("OpenAI API로 기본 분석 수행 중...")
-            result = await _analyze_with_openai(
-                target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
-            )
+            try:
+                result = await _analyze_with_openai(
+                    target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+                )
+                logger.info("✅ OpenAI API 분석 성공")
+            except Exception as e:
+                logger.error(f"❌ OpenAI API 호출 실패: {e}", exc_info=True)
+                # OpenAI 실패 시 Gemini로 재시도
+                if has_gemini_key:
+                    logger.info("Gemini API로 재시도 중...")
+                    try:
+                        if progress_tracker:
+                            await progress_tracker.update(50, "OpenAI 실패, Gemini로 재시도 중...")
+                        result = await _analyze_with_gemini(
+                            target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+                        )
+                        logger.info("✅ Gemini API 분석 성공 (OpenAI 실패 후 재시도)")
+                    except Exception as e2:
+                        logger.error(f"❌ Gemini API 재시도도 실패: {e2}", exc_info=True)
+                        logger.error("⚠️ 모든 AI API 호출 실패 - 기본 분석 모드로 전환")
+                        if progress_tracker:
+                            await progress_tracker.update(100, "모든 AI API 실패 - 기본 분석 모드")
+                        return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+                else:
+                    logger.error("⚠️ OpenAI 실패 및 Gemini API 키 없음 - 기본 분석 모드로 전환")
+                    if progress_tracker:
+                        await progress_tracker.update(100, "OpenAI 실패, Gemini 없음 - 기본 분석 모드")
+                    return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
             
             # Gemini API가 선택되고 사용 가능한 경우, OpenAI 결과를 보완
             if use_gemini and settings.GEMINI_API_KEY:
@@ -67,25 +104,42 @@ async def analyze_target(
                     # Gemini 실패해도 OpenAI 결과는 유지
                     if progress_tracker:
                         await progress_tracker.update(90, "Gemini 보완 실패, OpenAI 결과만 사용")
-        elif use_gemini and settings.GEMINI_API_KEY:
+        elif use_gemini and has_gemini_key:
             # OpenAI가 없고 Gemini만 있는 경우
             if progress_tracker:
                 await progress_tracker.update(10, "Gemini API로 분석 시작...")
             logger.info("Gemini API로 분석 수행 중...")
-            result = await _analyze_with_gemini(
-                target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
-            )
+            try:
+                result = await _analyze_with_gemini(
+                    target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+                )
+                logger.info("✅ Gemini API 분석 성공")
+            except Exception as e:
+                logger.error(f"❌ Gemini API 호출 실패: {e}", exc_info=True)
+                logger.error("⚠️ Gemini API 실패 - 기본 분석 모드로 전환")
+                if progress_tracker:
+                    await progress_tracker.update(100, "Gemini 실패 - 기본 분석 모드")
+                return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
         else:
             # AI API가 없으면 기본 분석 수행
-            logger.info("기본 분석 모드 사용")
+            logger.warning("⚠️ AI API 키가 설정되지 않아 기본 분석 모드 사용")
+            logger.warning("환경 변수 OPENAI_API_KEY 또는 GEMINI_API_KEY를 설정해주세요.")
+            if progress_tracker:
+                await progress_tracker.update(100, "AI API 키 미설정 - 기본 분석 모드")
             result = _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
         
-        logger.info(f"타겟 분석 완료: {target_keyword}")
+        logger.info(f"✅ 타겟 분석 완료: {target_keyword}")
         return result
         
     except Exception as e:
-        logger.error(f"타겟 분석 중 오류: {e}")
-        raise
+        logger.error(f"❌ 타겟 분석 중 치명적 오류: {e}", exc_info=True)
+        # 예외 발생 시에도 기본 분석 결과라도 반환
+        logger.warning("기본 분석 모드로 fallback 시도")
+        try:
+            return _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+        except Exception as e2:
+            logger.error(f"기본 분석 모드도 실패: {e2}")
+            raise
 
 
 async def _analyze_with_gemini(
@@ -101,11 +155,16 @@ async def _analyze_with_gemini(
         import asyncio
         import os
         
+        # API 키 확인
+        if not settings.GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다.")
+        
         # 프롬프트 생성
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context, start_date, end_date)
         
         # 모델 설정 (기본값: gemini-2.5-flash-preview)
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash-preview')
+        logger.info(f"Gemini API 클라이언트 초기화 중... (모델: {model_name})")
         
         # 새로운 Gemini API 방식 시도 (from google import genai)
         try:
@@ -272,6 +331,11 @@ async def _analyze_with_openai(
     try:
         from openai import AsyncOpenAI
         
+        # API 키 확인
+        if not settings.OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        logger.info(f"OpenAI API 클라이언트 초기화 중... (모델: {settings.OPENAI_MODEL})")
         client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         
         # 프롬프트 생성
@@ -286,20 +350,28 @@ async def _analyze_with_openai(
             await progress_tracker.update(30, "OpenAI API 요청 전송 중...")
         
         # API 호출
-        response = await client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            response_format={"type": "json_object"}  # JSON 응답 강제
-        )
+        logger.info("OpenAI API 요청 전송 중...")
+        try:
+            response = await client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"}  # JSON 응답 강제
+            )
+            logger.info("OpenAI API 응답 수신 완료")
+        except Exception as api_error:
+            logger.error(f"OpenAI API 호출 중 오류 발생: {api_error}", exc_info=True)
+            raise ValueError(f"OpenAI API 호출 실패: {str(api_error)}")
         
         result_text = response.choices[0].message.content
         
         if not result_text:
             raise ValueError("OpenAI API 응답이 비어있습니다.")
+        
+        logger.info(f"OpenAI 응답 길이: {len(result_text)} 문자")
         
         if progress_tracker:
             await progress_tracker.update(80, "AI 응답 수신 완료, 결과 파싱 중...")
@@ -423,39 +495,63 @@ def _analyze_basic(
         period_note = f" (종료일: {end_date})"
     
     # MECE 구조로 기본 분석 결과 반환
+    api_key_status = {
+        "openai_configured": bool(settings.OPENAI_API_KEY),
+        "gemini_configured": bool(settings.GEMINI_API_KEY),
+        "message": "⚠️ AI API 키가 설정되지 않아 기본 분석 모드로 실행되었습니다."
+    }
+    
+    if not api_key_status["openai_configured"] and not api_key_status["gemini_configured"]:
+        api_key_status["message"] = "❌ OpenAI API 키와 Gemini API 키가 모두 설정되지 않았습니다. 환경 변수 OPENAI_API_KEY 또는 GEMINI_API_KEY를 설정해주세요."
+    elif not api_key_status["openai_configured"]:
+        api_key_status["message"] = "⚠️ OpenAI API 키가 설정되지 않았습니다. 환경 변수 OPENAI_API_KEY를 설정하면 더 정확한 분석이 가능합니다."
+    elif not api_key_status["gemini_configured"]:
+        api_key_status["message"] = "ℹ️ Gemini API 키가 설정되지 않았습니다. 환경 변수 GEMINI_API_KEY를 설정하면 보완 분석이 가능합니다."
+    
     result = {
         "target_keyword": target_keyword,
         "target_type": target_type,
-        "executive_summary": f"{target_keyword}에 대한 {target_type} 분석 결과입니다.{period_note} AI API를 설정하면 더 상세한 분석이 가능합니다.",
+        "api_key_status": api_key_status,
+        "executive_summary": f"{target_keyword}에 대한 {target_type} 분석 결과입니다.{period_note}\n\n{api_key_status['message']}\n\nAI API를 설정하면 더 상세하고 정확한 분석이 가능합니다.",
         "key_findings": {
             "primary_insights": [
                 f"{target_keyword}의 주요 특징",
                 f"{target_type} 관점에서의 분석",
-                "추가 컨텍스트가 제공된 경우 이를 반영한 분석"
+                "추가 컨텍스트가 제공된 경우 이를 반영한 분석",
+                "⚠️ 이 결과는 기본 분석 모드입니다. AI API 키를 설정하면 훨씬 더 상세한 분석을 받을 수 있습니다."
             ],
             "quantitative_metrics": {
-                "estimated_volume": "AI API 필요",
-                "competition_level": "AI API 필요",
-                "growth_potential": "AI API 필요"
+                "estimated_volume": "AI API 필요 - OpenAI 또는 Gemini API 키를 설정해주세요",
+                "competition_level": "AI API 필요 - OpenAI 또는 Gemini API 키를 설정해주세요",
+                "growth_potential": "AI API 필요 - OpenAI 또는 Gemini API 키를 설정해주세요"
             }
         },
         "detailed_analysis": {
             "insights": {
-                "note": "AI API를 설정하면 더 상세한 분석이 가능합니다."
+                "note": api_key_status["message"],
+                "setup_instructions": {
+                    "openai": "환경 변수에 OPENAI_API_KEY를 설정하세요. 예: export OPENAI_API_KEY='sk-...'",
+                    "gemini": "환경 변수에 GEMINI_API_KEY를 설정하세요. 예: export GEMINI_API_KEY='...'",
+                    "vercel": "Vercel 배포 시 환경 변수는 Vercel 대시보드의 Settings > Environment Variables에서 설정하세요."
+                }
             }
         },
         "strategic_recommendations": {
             "immediate_actions": [
-                "OpenAI 또는 Gemini API 키를 설정해주세요.",
-                "API 키 설정 후 다시 분석을 시도하세요."
+                "OpenAI 또는 Gemini API 키를 환경 변수에 설정해주세요.",
+                "API 키 설정 후 서버를 재시작하고 다시 분석을 시도하세요.",
+                "Vercel 배포 시: Vercel 대시보드 > Settings > Environment Variables에서 설정",
+                "로컬 개발 시: .env 파일에 OPENAI_API_KEY 또는 GEMINI_API_KEY 추가"
             ],
             "short_term_strategies": [
                 "AI API를 통한 정량적 데이터 수집",
-                "정성적 인사이트 도출"
+                "정성적 인사이트 도출",
+                "기간별 트렌드 분석"
             ],
             "long_term_strategies": [
                 "지속적인 데이터 모니터링",
-                "트렌드 분석 및 예측"
+                "트렌드 분석 및 예측",
+                "자동화된 분석 파이프라인 구축"
             ]
         },
         # 하위 호환성을 위한 기존 구조도 포함

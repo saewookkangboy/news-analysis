@@ -60,6 +60,17 @@ class Settings(BaseSettings):
 # 전역 설정 인스턴스
 settings = Settings()
 
+# 설정 로딩 확인 및 로깅 (디버그용)
+import logging
+config_logger = logging.getLogger(__name__)
+config_logger.info("=" * 60)
+config_logger.info("환경 변수 로딩 상태 확인")
+config_logger.info(f"OPENAI_API_KEY: {'설정됨' if settings.OPENAI_API_KEY else '❌ 미설정'}")
+config_logger.info(f"GEMINI_API_KEY: {'설정됨' if settings.GEMINI_API_KEY else '❌ 미설정'}")
+config_logger.info(f"OPENAI_MODEL: {settings.OPENAI_MODEL}")
+config_logger.info(f"GEMINI_MODEL: {settings.GEMINI_MODEL}")
+config_logger.info("=" * 60)
+
 # 디렉토리 생성
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / settings.DATA_DIR

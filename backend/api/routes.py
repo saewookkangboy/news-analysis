@@ -29,6 +29,7 @@ async def analyze_target_endpoint(
     """AI를 사용하여 타겟 분석을 수행합니다. 정성적 분석 및 키워드 추천 옵션 포함."""
     try:
         logger.info(f"타겟 분석 요청: {target_keyword} ({target_type})")
+        logger.info(f"요청 파라미터 - use_gemini: {use_gemini}, start_date: {start_date}, end_date: {end_date}")
         
         # 타겟 타입 검증
         if target_type not in ["keyword", "audience", "competitor"]:
@@ -38,7 +39,11 @@ async def analyze_target_endpoint(
             )
         
         # Progress tracker 생성
-        progress_tracker = create_progress_tracker()
+        try:
+            progress_tracker = create_progress_tracker()
+        except Exception as e:
+            logger.warning(f"Progress tracker 생성 실패 (계속 진행): {e}")
+            progress_tracker = None
         
         # 타겟 분석 수행
         result = await analyze_target(
@@ -101,9 +106,18 @@ async def analyze_target_endpoint(
         
         logger.info(f"타겟 분석 완료: {target_keyword} ({target_type})")
         
+        # 결과에 API 키 상태 정보 추가 (디버깅용)
+        if isinstance(result, dict):
+            # 기본 분석 모드인지 확인
+            if result.get("api_key_status"):
+                logger.warning(f"⚠️ 기본 분석 모드로 실행됨: {result.get('api_key_status', {}).get('message', '')}")
+        
         # Progress tracker 정리
         if 'progress_tracker' in locals() and progress_tracker:
-            remove_progress_tracker(progress_tracker.task_id)
+            try:
+                remove_progress_tracker(progress_tracker.task_id)
+            except Exception as e:
+                logger.warning(f"Progress tracker 정리 실패: {e}")
         
         return {
             "success": True,
