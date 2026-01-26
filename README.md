@@ -65,6 +65,13 @@ pip install -r requirements.txt
 ### 3. 환경 변수 설정
 프로젝트 루트에 `.env` 파일을 생성하고 다음 내용을 추가하세요:
 
+```bash
+# .env.example 파일을 복사하여 사용
+cp .env.example .env
+```
+
+그리고 `.env` 파일을 열어 실제 API 키를 입력하세요:
+
 ```env
 # AI API 설정 (최소 하나는 필요)
 OPENAI_API_KEY=your_openai_api_key_here
@@ -79,6 +86,8 @@ DEBUG=True
 CACHE_ENABLED=True
 CACHE_TTL=3600
 ```
+
+모든 설정 옵션은 `.env.example` 파일을 참고하세요.
 
 ### 4. 서버 실행
 
@@ -146,28 +155,45 @@ curl "http://localhost:8000/api/target/analyze?target_keyword=인공지능&targe
 
 ```
 news-trend-analyzer/
-├── backend/                 # 백엔드 코드
-│   ├── api/                # API 라우터
-│   │   ├── routes.py       # 메인 API 엔드포인트
-│   │   └── cache_stats.py  # 캐시 통계
-│   ├── middleware/         # 미들웨어
+├── backend/                    # 백엔드 코드
+│   ├── api/                   # API 라우터
+│   │   ├── routes.py          # 메인 API 엔드포인트
+│   │   └── cache_stats.py     # 캐시 통계
+│   ├── middleware/            # 미들웨어
 │   │   └── cache_middleware.py
-│   ├── services/           # 비즈니스 로직
-│   │   └── target_analyzer.py  # 타겟 분석 서비스
-│   ├── config.py           # 설정 관리
-│   └── main.py             # FastAPI 앱
-├── frontend/               # 프론트엔드 코드
+│   ├── services/              # 비즈니스 로직
+│   │   ├── target_analyzer.py      # 타겟 분석 서비스
+│   │   ├── sentiment_analyzer.py   # 감정 분석 서비스
+│   │   ├── keyword_recommender.py  # 키워드 추천 서비스
+│   │   └── progress_tracker.py     # 진행 상황 추적
+│   ├── config.py              # 설정 관리 (중앙화)
+│   └── main.py                # FastAPI 앱 진입점
+├── frontend/                  # 프론트엔드 코드
 │   └── src/
-│       ├── components/     # React 컴포넌트
-│       ├── App.tsx         # 메인 앱 컴포넌트
-│       └── index.css       # 스타일
-├── api/                    # Vercel 배포용
-│   └── index.py
-├── requirements.txt        # Python 의존성
-├── vercel.json            # Vercel 설정
-├── run.py                 # 실행 스크립트
-└── README.md              # 프로젝트 문서
+│       ├── components/        # React 컴포넌트
+│       ├── services/          # API 서비스
+│       ├── utils/             # 유틸리티
+│       ├── App.tsx            # 메인 앱 컴포넌트
+│       └── index.css          # 스타일
+├── api/                       # Vercel Serverless Functions
+│   └── index.py              # Vercel 진입점
+├── scripts/                   # 유틸리티 스크립트
+│   ├── verify_api_keys.py    # API 키 검증
+│   └── test_api_keys_vercel.py
+├── docs/                      # 문서 파일
+│   └── PROJECT_STRUCTURE.md  # 상세 구조 가이드
+├── data/                      # 데이터 저장소 (로컬 개발용)
+│   ├── raw/                   # 원시 데이터
+│   ├── processed/             # 처리된 데이터
+│   └── cache/                 # 캐시 데이터
+├── .env.example              # 환경 변수 템플릿
+├── requirements.txt          # Python 의존성
+├── vercel.json              # Vercel 배포 설정
+├── run.py                   # 로컬 실행 스크립트
+└── README.md                # 프로젝트 문서
 ```
+
+자세한 구조는 [docs/PROJECT_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md)를 참고하세요.
 
 ## 🔌 API 엔드포인트
 

@@ -120,18 +120,19 @@ config_logger.info(f"OPENAI_MODEL: {settings.OPENAI_MODEL}")
 config_logger.info(f"GEMINI_MODEL: {settings.GEMINI_MODEL}")
 config_logger.info("=" * 60)
 
-# 디렉토리 생성
+# 디렉토리 구조 정의
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / settings.DATA_DIR
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 CACHE_DIR = DATA_DIR / "cache"
-ASSETS_DIR = BASE_DIR / "frontend" / "assets"
+ASSETS_DIR = BASE_DIR / "frontend" / "public" / "assets"
 LOGS_DIR = BASE_DIR / "logs"
+EXPORTS_DIR = BASE_DIR / "exports"  # 분석 결과 내보내기용
 
 # 필요한 디렉토리 생성 (Vercel 환경에서는 건너뛰기)
 if not IS_VERCEL:
-    for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, ASSETS_DIR, LOGS_DIR]:
+    for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, CACHE_DIR, ASSETS_DIR, LOGS_DIR, EXPORTS_DIR]:
         try:
             directory.mkdir(parents=True, exist_ok=True)
         except Exception as e:

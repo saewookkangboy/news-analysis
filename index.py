@@ -1,20 +1,17 @@
 """
-FastAPI 메인 애플리케이션 - Vercel 진입점
-Vercel은 루트의 index.py를 자동으로 인식합니다.
+Vercel 루트 진입점 (선택사항)
+주로 api/index.py를 사용하지만, 일부 Vercel 설정에서는 루트의 index.py도 인식할 수 있습니다.
 """
-import os
 import sys
 from pathlib import Path
 
-# Vercel 환경 확인
-IS_VERCEL = os.environ.get("VERCEL") == "1"
-
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 # FastAPI 앱 import
 from backend.main import app
 
-# Vercel은 FastAPI 앱을 자동으로 인식하므로 app을 직접 export
-# Mangum은 필요시 Vercel이 자동으로 처리합니다
+# Vercel은 FastAPI 앱을 자동으로 인식
+# 주 진입점은 api/index.py를 사용하는 것을 권장합니다

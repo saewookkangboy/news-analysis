@@ -1,8 +1,3 @@
-# Environment variables
-.env
-.env.local
-.env.*.local
-
 # Python
 __pycache__/
 *.py[cod]
@@ -24,12 +19,18 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
+# Virtual Environment
 venv/
 env/
 ENV/
 .venv
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # IDE
 .vscode/
@@ -37,28 +38,43 @@ ENV/
 *.swp
 *.swo
 *~
+.DS_Store
 
 # Logs
-*.log
 logs/
+*.log
 
-# Data
-data/cache/
-data/raw/
-data/processed/
+# Data directories (로컬 개발용)
+data/
+exports/
 *.db
 *.sqlite
+*.sqlite3
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Frontend
-node_modules/
+# Frontend build
 frontend/build/
 frontend/dist/
+frontend/.next/
+frontend/node_modules/
+frontend/.cache/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Vercel
+.vercel
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS
+Thumbs.db
+.DS_Store
