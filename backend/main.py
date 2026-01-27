@@ -899,7 +899,7 @@ async def root():
                         buffer += decoder.decode(value, { stream: true });
                         
                         // 줄 단위로 분리하여 처리
-                        const lines = buffer.split("\n");
+                        const lines = buffer.split("\\n");
                         buffer = lines.pop() || ""; // 마지막 불완전한 줄은 버퍼에 유지
                         
                         for (const line of lines) {
