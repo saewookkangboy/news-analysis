@@ -570,18 +570,49 @@ async def root():
         </div>
         
         <script>
-            // 기본 날짜 설정 (최근 3개월)
+            // 기본 날짜 설정 (최근 3개월) 및 URL 파라미터 처리
             window.addEventListener('DOMContentLoaded', function() {
                 const today = new Date();
                 const threeMonthsAgo = new Date();
                 threeMonthsAgo.setMonth(today.getMonth() - 3);
                 
+                // URL 파라미터 읽기
+                const urlParams = new URLSearchParams(window.location.search);
+                
+                const targetKeywordInput = document.getElementById('target_keyword');
+                const targetTypeSelect = document.getElementById('target_type');
                 const startDateInput = document.getElementById('start_date');
                 const endDateInput = document.getElementById('end_date');
+                const additionalContextInput = document.getElementById('additional_context');
+                const useGeminiCheckbox = document.getElementById('use_gemini');
                 
-                if (startDateInput && endDateInput) {
+                // URL 파라미터로 폼 채우기
+                if (urlParams.has('target_keyword') && targetKeywordInput) {
+                    targetKeywordInput.value = decodeURIComponent(urlParams.get('target_keyword'));
+                }
+                
+                if (urlParams.has('target_type') && targetTypeSelect) {
+                    targetTypeSelect.value = urlParams.get('target_type');
+                }
+                
+                if (urlParams.has('start_date') && startDateInput) {
+                    startDateInput.value = urlParams.get('start_date');
+                } else if (startDateInput) {
                     startDateInput.value = threeMonthsAgo.toISOString().split('T')[0];
+                }
+                
+                if (urlParams.has('end_date') && endDateInput) {
+                    endDateInput.value = urlParams.get('end_date');
+                } else if (endDateInput) {
                     endDateInput.value = today.toISOString().split('T')[0];
+                }
+                
+                if (urlParams.has('additional_context') && additionalContextInput) {
+                    additionalContextInput.value = decodeURIComponent(urlParams.get('additional_context'));
+                }
+                
+                if (urlParams.has('use_gemini') && useGeminiCheckbox) {
+                    useGeminiCheckbox.checked = urlParams.get('use_gemini') === 'on' || urlParams.get('use_gemini') === 'true';
                 }
             });
             
