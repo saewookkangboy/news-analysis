@@ -753,14 +753,14 @@ async def root():
                     progressContainer.style.display = "block";
                 }
                 if (progressBar) {
-                    progressBar.style.width = '0%';
-                    progressBar.textContent = '0%';
+                    progressBar.style.width = "0%";
+                    progressBar.textContent = "0%";
                 }
                 if (progressPercentage) {
-                    progressPercentage.textContent = '0%';
+                    progressPercentage.textContent = "0%";
                 }
                 if (progressStep) {
-                    progressStep.textContent = '분석 준비 중...';
+                    progressStep.textContent = "분석 준비 중...";
                 }
                 
                 // 폼 데이터 수집
@@ -847,10 +847,10 @@ async def root():
                     let accumulatedResult = null;
                     let currentSection = "executive_summary";
                     const sectionHeaders = {
-                        "executive_summary": "## 📋 Executive Summary\n\n",
-                        "key_findings": "\n## 🔍 Key Findings\n\n",
-                        "detailed_analysis": "\n## 📊 Detailed Analysis\n\n",
-                        "strategic_recommendations": "\n## 💡 Strategic Recommendations\n\n"
+                        "executive_summary": "## Executive Summary\\n\\n",
+                        "key_findings": "\\n## Key Findings\\n\\n",
+                        "detailed_analysis": "\\n## Detailed Analysis\\n\\n",
+                        "strategic_recommendations": "\\n## Strategic Recommendations\\n\\n"
                     };
                     
                     // 섹션 헤더 추가 함수
@@ -1152,13 +1152,13 @@ async def root():
                                 
                                 const cleanedSummary = uniqueLines.join('\\n').trim();
                                 if (cleanedSummary) {
-                                    resultText += "## 📋 Executive Summary\\n\\n" + (cleanedSummary) + "\\n\\n" ;
+                                    resultText += "## Executive Summary\\n\\n" + (cleanedSummary) + "\\n\\n" ;
                                 }
                             }
                             
                             // Key Findings
                             if (analysisData.key_findings) {
-                                resultText += "## 🔑 주요 발견사항 (Key Findings)\\n\\n" ;
+                                resultText += "## 주요 발견사항 (Key Findings)\\n\\n" ;
                                 
                                 const keyFindings = analysisData.key_findings;
                                 
@@ -1219,7 +1219,7 @@ async def root():
                                     }
                                 });
                             } else if (analysisData.key_points && Array.isArray(analysisData.key_points) && analysisData.key_points.length > 0) {
-                                resultText += "## 🔑 주요 포인트\\n\\n" ;
+                                resultText += "## 주요 포인트\\n\\n" ;
                                 analysisData.key_points.forEach((point, idx) => {
                                     // API 키 경고 메시지 제거
                                     if (!point.includes("⚠️ AI API 키가 설정되지 않아") && 
@@ -1237,7 +1237,7 @@ async def root():
                             
                             // detailed_analysis가 직접 객체인 경우
                             if (detailedAnalysis && typeof detailedAnalysis === "object") {
-                                resultText += "## 💡 상세 분석 (Detailed Analysis)\\n\\n" ;
+                                resultText += "## 상세 분석 (Detailed Analysis)\\n\\n" ;
                                 
                                 // insights가 있는 경우
                                 if (insights) {
@@ -1346,7 +1346,7 @@ async def root():
                             }
                             // detailed_analysis가 없지만 insights가 직접 있는 경우
                             else if (insights && typeof insights === "object") {
-                                resultText += "## 💡 상세 분석 (Detailed Analysis)\\n\\n" ;
+                                resultText += "## 상세 분석 (Detailed Analysis)\\n\\n" ;
                                 
                                 if (insights.demographics) {
                                     resultText += "### 인구통계학적 특성\\n\\n" ;
@@ -1408,7 +1408,7 @@ async def root():
                             
                             // Strategic Recommendations
                             if (analysisData.strategic_recommendations) {
-                                resultText += "## 💼 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
+                                resultText += "## 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
                                 
                                 const recs = analysisData.strategic_recommendations;
                                 
@@ -1440,7 +1440,7 @@ async def root():
                                     resultText += "### 성공 지표\\n\\n" + (recs.success_metrics) + "\\n\\n" ;
                                 }
                             } else if (analysisData.recommendations && analysisData.recommendations.length > 0) {
-                                resultText += "## 💼 권장사항\\n\\n" ;
+                                resultText += "## 권장사항\\n\\n" ;
                                 analysisData.recommendations.forEach((rec, idx) => {
                                     resultText += (idx + 1) + ". " + (rec) + "\\n" ;
                                 });
@@ -1449,7 +1449,7 @@ async def root():
                             
                             // Metrics (하위 호환성)
                             if (analysisData.metrics && !analysisData.key_findings) {
-                                resultText += "## 📊 지표\\n\\n" ;
+                                resultText += "## 지표\\n\\n" ;
                                 const metrics = analysisData.metrics;
                                 if (metrics.estimated_volume) resultText += "- **예상 규모**: " + (metrics.estimated_volume) + "\\n" ;
                                 if (metrics.engagement_level) resultText += "- **참여 수준**: " + (metrics.engagement_level) + "\\n" ;
@@ -1463,14 +1463,14 @@ async def root():
                             
                             // Executive Summary
                             if (analysisData.executive_summary) {
-                                resultText += "## 📋 Executive Summary\\n\\n" + (analysisData.executive_summary) + "\\n\\n" ;
+                                resultText += "## Executive Summary\\n\\n" + (analysisData.executive_summary) + "\\n\\n" ;
                             } else if (analysisData.summary) {
-                                resultText += "## 📋 요약\\n\\n" + (analysisData.summary) + "\\n\\n" ;
+                                resultText += "## 요약\\n\\n" + (analysisData.summary) + "\\n\\n" ;
                             }
                             
                             // Key Findings
                             if (analysisData.key_findings) {
-                                resultText += "## 🔑 주요 발견사항 (Key Findings)\\n\\n" ;
+                                resultText += "## 주요 발견사항 (Key Findings)\\n\\n" ;
                                 
                                 if (analysisData.key_findings.primary_insights && analysisData.key_findings.primary_insights.length > 0) {
                                     resultText += "### 핵심 인사이트\\n\\n" ;
@@ -1491,7 +1491,7 @@ async def root():
                                     resultText += "\\n" ;
                                 }
                             } else if (analysisData.key_points && analysisData.key_points.length > 0) {
-                                resultText += "## 🔑 주요 포인트\\n\\n" ;
+                                resultText += "## 주요 포인트\\n\\n" ;
                                 analysisData.key_points.forEach((point, idx) => {
                                     resultText += (idx + 1) + ". " + (point) + "\\n" ;
                                 });
@@ -1503,7 +1503,7 @@ async def root():
                             const insights = detailedAnalysis.insights || analysisData.insights;
                             
                             if (insights) {
-                                resultText += "## 💡 상세 분석 (Detailed Analysis)\\n\\n" ;
+                                resultText += "## 상세 분석 (Detailed Analysis)\\n\\n" ;
                                 
                                 if (insights.search_intent) {
                                     resultText += "### 검색 의도 분석\\n\\n" ;
@@ -1598,7 +1598,7 @@ async def root():
                             
                             // Strategic Recommendations
                             if (analysisData.strategic_recommendations) {
-                                resultText += "## 💼 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
+                                resultText += "## 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
                                 
                                 const recs = analysisData.strategic_recommendations;
                                 
@@ -1630,7 +1630,7 @@ async def root():
                                     resultText += "### 성공 지표\\n\\n" + (recs.success_metrics) + "\\n\\n" ;
                                 }
                             } else if (analysisData.recommendations && analysisData.recommendations.length > 0) {
-                                resultText += "## 💼 키워드 최적화 전략\\n\\n" ;
+                                resultText += "## 키워드 최적화 전략\\n\\n" ;
                                 analysisData.recommendations.forEach((rec, idx) => {
                                     resultText += (idx + 1) + ". " + (rec) + "\\n" ;
                                 });
@@ -1639,7 +1639,7 @@ async def root():
                             
                             // Metrics (하위 호환성)
                             if (analysisData.metrics && !analysisData.key_findings) {
-                                resultText += "## 📊 지표\\n\\n" ;
+                                resultText += "## 지표\\n\\n" ;
                                 const metrics = analysisData.metrics;
                                 if (metrics.estimated_volume) resultText += "- **예상 검색량**: " + (metrics.estimated_volume) + "\\n" ;
                                 if (metrics.competition_level) resultText += "- **경쟁 수준**: " + (metrics.competition_level) + "\\n" ;
@@ -1651,7 +1651,7 @@ async def root():
                             
                             // 타겟 오디언스 정보 (키워드 분석의 경우)
                             if (analysisData.target_audience && analysisData.target_audience.expected_occupations) {
-                                resultText += "## 👔 예상 직업\\n\\n" ;
+                                resultText += "## 예상 직업\\n\\n" ;
                                 analysisData.target_audience.expected_occupations.forEach((occupation, idx) => {
                                     resultText += (idx + 1) + ". " + (occupation) + "\\n" ;
                                 });
@@ -1662,14 +1662,14 @@ async def root():
                             
                             // Executive Summary
                             if (analysisData.executive_summary) {
-                                resultText += "## 📋 Executive Summary\\n\\n" + (analysisData.executive_summary) + "\\n\\n" ;
+                                resultText += "## Executive Summary\\n\\n" + (analysisData.executive_summary) + "\\n\\n" ;
                             } else if (analysisData.summary) {
-                                resultText += "## 📋 요약\\n\\n" + (analysisData.summary) + "\\n\\n" ;
+                                resultText += "## 요약\\n\\n" + (analysisData.summary) + "\\n\\n" ;
                             }
                             
                             // Key Findings
                             if (analysisData.key_findings) {
-                                resultText += "## 🔑 주요 발견사항 (Key Findings)\\n\\n" ;
+                                resultText += "## 주요 발견사항 (Key Findings)\\n\\n" ;
                                 
                                 if (analysisData.key_findings.primary_insights && analysisData.key_findings.primary_insights.length > 0) {
                                     resultText += "### 핵심 인사이트\\n\\n" ;
@@ -1690,7 +1690,7 @@ async def root():
                                     resultText += "\\n" ;
                                 }
                             } else if (analysisData.key_points && analysisData.key_points.length > 0) {
-                                resultText += "## 🔑 주요 포인트\\n\\n" ;
+                                resultText += "## 주요 포인트\\n\\n" ;
                                 analysisData.key_points.forEach((point, idx) => {
                                     resultText += (idx + 1) + ". " + (point) + "\\n" ;
                                 });
@@ -1701,7 +1701,7 @@ async def root():
                             const integrated = analysisData.integrated_analysis || analysisData.detailed_analysis || analysisData;
                             
                             if (integrated) {
-                                resultText += "## 💡 통합 분석 (Integrated Analysis)\\n\\n" ;
+                                resultText += "## 통합 분석 (Integrated Analysis)\\n\\n" ;
                                 
                                 // Keyword-Audience Alignment
                                 if (integrated.keyword_audience_alignment) {
@@ -1797,7 +1797,7 @@ async def root():
                             
                             // Forward-Looking Recommendations
                             if (analysisData.forward_looking_recommendations) {
-                                resultText += "## 🚀 앞으로의 제안 방향 (Forward-Looking Recommendations)\\n\\n" ;
+                                resultText += "## 앞으로의 제안 방향 (Forward-Looking Recommendations)\\n\\n" ;
                                 const rec = analysisData.forward_looking_recommendations;
                                 
                                 if (rec.immediate_actions && Array.isArray(rec.immediate_actions)) {
@@ -1859,7 +1859,7 @@ async def root():
                                     resultText += "\\n" ;
                                 }
                             } else if (analysisData.strategic_recommendations) {
-                                resultText += "## 🎯 전략적 제안\\n\\n" ;
+                                resultText += "## 전략적 제안\\n\\n" ;
                                 const strat = analysisData.strategic_recommendations;
                                 if (strat.content_differentiation && strat.content_differentiation.length > 0) {
                                     resultText += "### 콘텐츠 차별화 전략\\n\\n" ;
@@ -1877,7 +1877,7 @@ async def root():
                             }
                             
                             if (analysisData.recommendations && analysisData.recommendations.length > 0) {
-                                resultText += "## 💼 경쟁 전략\\n\\n" ;
+                                resultText += "## 경쟁 전략\\n\\n" ;
                                 analysisData.recommendations.forEach((rec, idx) => {
                                     resultText += (idx + 1) + ". " + (rec) + "\\n" ;
                                 });
@@ -1886,7 +1886,7 @@ async def root():
                             
                             // Metrics (하위 호환성 - key_findings가 없을 때만)
                             if (analysisData.metrics && !analysisData.key_findings) {
-                                resultText += "## 📊 지표\\n\\n" ;
+                                resultText += "## 지표\\n\\n" ;
                                 const metrics = analysisData.metrics;
                                 if (metrics.competition_level) resultText += "- **경쟁 수준**: " + (metrics.competition_level) + "\\n" ;
                                 if (metrics.market_opportunity) resultText += "- **시장 기회 크기**: " + (metrics.market_opportunity) + "\\n" ;
@@ -1907,7 +1907,7 @@ async def root():
                         
                         // Sentiment 분석
                         if (sentimentData && typeof sentimentData === "object") {
-                            resultText += "## 😊 감정 분석 (Sentiment Analysis)\\n\\n" ;
+                            resultText += "## 감정 분석 (Sentiment Analysis)\\n\\n" ;
                             const sentiment = sentimentData;
                             if (sentiment.overall_sentiment) resultText += "- **전체 감정**: " + (sentiment.overall_sentiment) + "\\n" ;
                             if (sentiment.sentiment_score !== undefined && sentiment.sentiment_score !== null) {
@@ -1941,7 +1941,7 @@ async def root():
                         
                         // Context 분석
                         if (contextData && typeof contextData === "object") {
-                            resultText += "## 🌐 맥락 분석 (Context Analysis)\\n\\n" ;
+                            resultText += "## 맥락 분석 (Context Analysis)\\n\\n" ;
                             const context = contextData;
                             if (context.industry_context) resultText += "- **산업 맥락**: " + (context.industry_context) + "\\n" ;
                             if (context.market_context) resultText += "- **시장 맥락**: " + (context.market_context) + "\\n" ;
@@ -1971,7 +1971,7 @@ async def root():
                         
                         // Tone 분석
                         if (toneData && typeof toneData === "object") {
-                            resultText += "## 🎭 톤 분석 (Tone Analysis)\\n\\n" ;
+                            resultText += "## 톤 분석 (Tone Analysis)\\n\\n" ;
                             const tone = toneData;
                             if (tone.overall_tone) resultText += "- **전체 톤**: " + (tone.overall_tone) + "\\n" ;
                             if (tone.communication_style) resultText += "- **커뮤니케이션 스타일**: " + (tone.communication_style) + "\\n" ;
@@ -1999,7 +1999,7 @@ async def root():
                         // Recommendations (키워드 추천 등) - strategic_recommendations와 중복되지 않도록 확인
                         if (recommendationsData && !analysisData?.strategic_recommendations) {
                             if (typeof recommendationsData === "object" && !Array.isArray(recommendationsData)) {
-                                resultText += "## 💡 키워드 추천 (Keyword Recommendations)\\n\\n" ;
+                                resultText += "## 키워드 추천 (Keyword Recommendations)\\n\\n" ;
                                 const recs = recommendationsData;
                                 
                                 if (recs.semantic_keywords && Array.isArray(recs.semantic_keywords) && recs.semantic_keywords.length > 0) {
@@ -2009,51 +2009,51 @@ async def root():
                                         const score = kw.score ? ' (점수: ' + kw.score + ')' : '';
                                         resultText += (idx + 1) + '. ' + keyword + score + '\\n';
                                     });
-                                    resultText += '\\n';
+                                    resultText += "\\n";
                                 }
                                 
                                 if (recs.co_occurring_keywords && Array.isArray(recs.co_occurring_keywords) && recs.co_occurring_keywords.length > 0) {
-                                    resultText += '### 공기 키워드\\n\\n';
+                                    resultText += "### 공기 키워드\\n\\n";
                                     recs.co_occurring_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === "string" ? kw : (kw.keyword || kw);
                                         resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
-                                    resultText += '\\n';
+                                    resultText += "\\n";
                                 }
                                 
                                 if (recs.long_tail_keywords && Array.isArray(recs.long_tail_keywords) && recs.long_tail_keywords.length > 0) {
-                                    resultText += '### 롱테일 키워드\\n\\n';
+                                    resultText += "### 롱테일 키워드\\n\\n";
                                     recs.long_tail_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === "string" ? kw : (kw.keyword || kw);
                                         resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
-                                    resultText += '\\n';
+                                    resultText += "\\n";
                                 }
                                 
                                 if (recs.trending_keywords && Array.isArray(recs.trending_keywords) && recs.trending_keywords.length > 0) {
-                                    resultText += '### 트렌딩 키워드\\n\\n';
+                                    resultText += "### 트렌딩 키워드\\n\\n";
                                     recs.trending_keywords.forEach((kw, idx) => {
                                         const keyword = typeof kw === "string" ? kw : (kw.keyword || kw);
                                         resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
-                                    resultText += '\\n';
+                                    resultText += "\\n";
                                 }
                                 
                                 // recommendations 객체의 다른 필드들도 동적으로 표시
                                 Object.keys(recs).forEach(key => {
                                     if (!['semantic_keywords', 'co_occurring_keywords', 'long_tail_keywords', 'trending_keywords'].includes(key) && recs[key]) {
                                         if (Array.isArray(recs[key]) && recs[key].length > 0) {
-                                            resultText += '### ' + key + '\\n\\n';
+                                            resultText += "### " + key + "\\n\\n";
                                             recs[key].forEach((item, idx) => {
                                                 const keyword = typeof item === "string" ? item : (item.keyword || item);
                                                 resultText += (idx + 1) + '. ' + keyword + '\\n';
                                             });
-                                            resultText += '\\n';
+                                            resultText += "\\n";
                                         }
                                     }
                                 });
                             } else if (Array.isArray(recommendationsData) && recommendationsData.length > 0) {
-                                resultText += "## 💡 키워드 추천\\n\\n" ;
+                                resultText += "## 키워드 추천\\n\\n" ;
                                 recommendationsData.forEach((rec, idx) => {
                                     const keyword = typeof rec === "string" ? rec : (rec.keyword || rec);
                                     resultText += (idx + 1) + ". " + (keyword) + "\\n" ;
