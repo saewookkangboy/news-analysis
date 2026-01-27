@@ -306,7 +306,6 @@ def parse_json_with_fallback(text: str) -> Dict[str, Any]:
     
     # 시도 4: 부분 파싱 시도 (executive_summary만이라도 추출)
     try:
-        import re
         result = {}
         
         # executive_summary 추출
