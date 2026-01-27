@@ -847,10 +847,10 @@ async def root():
                     let accumulatedResult = null;
                     let currentSection = "executive_summary";
                     const sectionHeaders = {
-                        "executive_summary": "## Executive Summary\\n\\n",
-                        "key_findings": "\\n## Key Findings\\n\\n",
-                        "detailed_analysis": "\\n## Detailed Analysis\\n\\n",
-                        "strategic_recommendations": "\\n## Strategic Recommendations\\n\\n"
+                        "executive_summary": "## Executive Summary\\\\n\\\\n",
+                        "key_findings": "\\\\n## Key Findings\\\\n\\\\n",
+                        "detailed_analysis": "\\\\n## Detailed Analysis\\\\n\\\\n",
+                        "strategic_recommendations": "\\\\n## Strategic Recommendations\\\\n\\\\n"
                     };
                     
                     // 섹션 헤더 추가 함수

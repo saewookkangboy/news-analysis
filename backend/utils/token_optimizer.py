@@ -108,6 +108,7 @@ def get_max_tokens_for_model(model: str, prompt_tokens: int) -> int:
         'gpt-4': 8192,
         'gpt-3.5-turbo': 16385,
         'gemini-2.5-flash': 1000000,
+        'gemini-2.0-flash': 1000000,
         'gemini-2.0-flash-exp': 1000000,
         'gemini-1.5-pro': 2000000,
         'gemini-1.5-flash': 1000000,

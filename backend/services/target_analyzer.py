@@ -14,6 +14,12 @@ from backend.utils.token_optimizer import (
     optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context,
     extract_and_fix_json, parse_json_with_fallback
 )
+from backend.utils.gemini_utils import (
+    generate_content_with_fallback,
+    generate_content_stream_with_fallback,
+    build_model_candidates,
+    is_model_not_found_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +254,7 @@ async def _analyze_with_gemini(
         logger.info("🚀 Gemini API 호출 시작")
         logger.info(f"API 키 확인: ✅ (길이: {len(api_key)} 문자)")
         logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}")
-        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')}")
+        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')}")
         logger.info("=" * 60)
         
         # 프롬프트 생성 및 최적화 (토큰 최적화 강화)
@@ -260,7 +266,7 @@ async def _analyze_with_gemini(
         prompt_tokens = estimate_tokens(prompt)
         
         # 모델 설정 (기본값: gemini-2.5-flash)
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')
         logger.info(f"Gemini API 클라이언트 초기화 중... (모델: {model_name})")
         logger.info(f"토큰 최적화: 프롬프트 {prompt_tokens} 토큰, 길이: {len(prompt)} 문자")
         
@@ -292,84 +298,28 @@ async def _analyze_with_gemini(
             logger.info(f"프롬프트 토큰 추정: {full_prompt_tokens}")
             logger.info(f"최대 출력 토큰: {max_output_tokens}")
             logger.info("=" * 60)
-            loop = asyncio.get_event_loop()
             try:
-                # JSON 응답 강제 시도 (새로운 API 방식)
-                # config 파라미터를 딕셔너리로 전달
-                try:
-                    # max_output_tokens 설정 추가
-                    response = await loop.run_in_executor(
-                        None, 
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt,
-                            config={
-                                "response_mime_type": "application/json",
-                                "max_output_tokens": max_output_tokens,
-                                "temperature": 0.5  # 속도 향상을 위해 낮춤
-                            }
-                        )
-                    )
-                    logger.info("=" * 60)
-                    logger.info("✅ Gemini API 응답 수신 완료 (JSON 모드)")
-                    logger.info("=" * 60)
-                except (TypeError, AttributeError) as config_error:
-                    # config 파라미터가 지원되지 않는 경우 generation_config 시도
-                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {config_error}")
-                    try:
-                        response = await loop.run_in_executor(
-                            None, 
-                            lambda: client.models.generate_content(
-                                model=model_name,
-                                contents=full_prompt,
-                                generation_config={
-                                    "response_mime_type": "application/json",
-                                    "max_output_tokens": max_output_tokens,
-                                    "temperature": 0.5  # 0.7에서 0.5로 낮춰서 더 빠르고 일관된 응답
-                                }
-                            )
-                        )
-                        logger.info("✅ Gemini API 응답 수신 완료 (generation_config 사용)")
-                    except Exception as gen_error:
-                        # generation_config도 실패하면 일반 모드
-                        logger.warning(f"generation_config도 실패, 일반 모드로 재시도: {gen_error}")
-                        response = await loop.run_in_executor(
-                            None, 
-                            lambda: client.models.generate_content(
-                                model=model_name,
-                                contents=full_prompt,
-                                config={
-                                    "max_output_tokens": max_output_tokens,
-                                    "temperature": 0.5  # 속도 향상을 위해 낮춤
-                                }
-                            )
-                        )
-                        logger.info("✅ Gemini API 응답 수신 완료 (일반 모드)")
+                response = await generate_content_with_fallback(
+                    client=client,
+                    model=model_name,
+                    contents=full_prompt,
+                    config={
+                        "response_mime_type": "application/json",
+                        "max_output_tokens": max_output_tokens,
+                        "temperature": 0.5,
+                    },
+                    logger=logger,
+                )
+                logger.info("=" * 60)
+                logger.info("✅ Gemini API 응답 수신 완료")
+                logger.info("=" * 60)
             except Exception as e:
-                logger.warning("=" * 60)
-                logger.warning(f"⚠️ JSON 응답 강제 실패, 일반 모드로 재시도: {type(e).__name__}: {e}")
-                logger.warning("=" * 60)
-                # JSON 응답 강제가 실패하면 일반 모드로 재시도
-                try:
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt,
-                            generation_config={
-                                "temperature": 0.5,  # 속도 향상을 위해 낮춤
-                                "max_output_tokens": max_output_tokens
-                            }
-                        )
-                    )
-                    logger.info("✅ 일반 모드로 Gemini API 응답 수신 완료")
-                except Exception as e2:
-                    logger.error("=" * 60)
-                    logger.error(f"❌ Gemini API 일반 모드도 실패: {type(e2).__name__}: {e2}")
-                    import traceback
-                    logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
-                    logger.error("=" * 60)
-                    raise ValueError(f"Gemini API 호출 실패: {str(e2)}")
+                logger.error("=" * 60)
+                logger.error(f"❌ Gemini API 호출 실패: {type(e).__name__}: {e}")
+                import traceback
+                logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                logger.error("=" * 60)
+                raise ValueError(f"Gemini API 호출 실패: {str(e)}")
             
             # 응답 파싱
             result_text = response.text if hasattr(response, 'text') else str(response)
@@ -380,7 +330,6 @@ async def _analyze_with_gemini(
             import google.generativeai as genai_old
             
             genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
-            model = genai_old.GenerativeModel(model_name)
             
             # 시스템 메시지와 프롬프트 결합 (최적화)
             system_message = _build_system_message(target_type)
@@ -392,68 +341,59 @@ async def _analyze_with_gemini(
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
             loop = asyncio.get_event_loop()
-            try:
-                # JSON 응답 강제 시도 (기존 API 방식)
-                # google.generativeai에서는 generation_config 사용
+            response = None
+            last_error = None
+            for candidate in build_model_candidates(model_name):
                 try:
-                    # GenerationConfig 객체 사용 시도
-                    if hasattr(genai_old, 'types') and hasattr(genai_old.types, 'GenerationConfig'):
-                        gen_config = genai_old.types.GenerationConfig(
-                            response_mime_type="application/json",
-                            max_output_tokens=max_output_tokens,
-                            temperature=0.5
-                        )
-                    else:
-                        gen_config = {
-                            "response_mime_type": "application/json",
-                            "max_output_tokens": max_output_tokens,
-                            "temperature": 0.5
-                        }
-                    response = await loop.run_in_executor(
-                        None, 
-                        lambda: model.generate_content(
-                            full_prompt,
-                            generation_config=gen_config
-                        )
-                    )
-                except (AttributeError, TypeError):
-                    # GenerationConfig가 없거나 지원하지 않는 경우 딕셔너리 사용
-                    response = await loop.run_in_executor(
-                        None, 
-                        lambda: model.generate_content(
-                            full_prompt,
-                            generation_config={
+                    if candidate != model_name:
+                        logger.warning(f"GEMINI_MODEL fallback 사용: {candidate}")
+                    model = genai_old.GenerativeModel(candidate)
+                    # JSON 응답 강제 시도 (기존 API 방식)
+                    # google.generativeai에서는 generation_config 사용
+                    try:
+                        if hasattr(genai_old, 'types') and hasattr(genai_old.types, 'GenerationConfig'):
+                            gen_config = genai_old.types.GenerationConfig(
+                                response_mime_type="application/json",
+                                max_output_tokens=max_output_tokens,
+                                temperature=0.5,
+                            )
+                        else:
+                            gen_config = {
                                 "response_mime_type": "application/json",
                                 "max_output_tokens": max_output_tokens,
-                                "temperature": 0.5  # 속도 향상을 위해 낮춤
+                                "temperature": 0.5,
                             }
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: model.generate_content(
+                                full_prompt,
+                                generation_config=gen_config,
+                            ),
                         )
-                    )
-                logger.info("✅ JSON 모드로 Gemini API 응답 수신 완료")
-            except Exception as e:
-                logger.warning("=" * 60)
-                logger.warning(f"⚠️ JSON 응답 강제 실패, 일반 모드로 재시도: {type(e).__name__}: {e}")
-                logger.warning("=" * 60)
-                # JSON 응답 강제가 실패하면 일반 모드로 재시도
-                try:
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: model.generate_content(
-                            full_prompt,
-                            generation_config={
-                                "temperature": 0.5,  # 속도 향상을 위해 낮춤
-                                "max_output_tokens": 3000  # 출력 토큰 제한
-                            }
+                    except (AttributeError, TypeError):
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: model.generate_content(
+                                full_prompt,
+                                generation_config={
+                                    "response_mime_type": "application/json",
+                                    "max_output_tokens": max_output_tokens,
+                                    "temperature": 0.5,
+                                },
+                            ),
                         )
-                    )
-                    logger.info("✅ 일반 모드로 Gemini API 응답 수신 완료")
-                except Exception as e2:
-                    logger.error("=" * 60)
-                    logger.error(f"❌ Gemini API 일반 모드도 실패: {type(e2).__name__}: {e2}")
-                    import traceback
-                    logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
-                    logger.error("=" * 60)
-                    raise ValueError(f"Gemini API 호출 실패: {str(e2)}")
+                    logger.info("✅ JSON 모드로 Gemini API 응답 수신 완료")
+                    break
+                except Exception as e:
+                    last_error = e
+                    if not is_model_not_found_error(e):
+                        raise
+                    continue
+            if response is None:
+                logger.error("=" * 60)
+                logger.error(f"❌ Gemini API 호출 실패: {last_error}")
+                logger.error("=" * 60)
+                raise ValueError(f"Gemini API 호출 실패: {str(last_error)}")
             
             # 응답 파싱
             result_text = response.text if hasattr(response, 'text') else str(response)
@@ -1873,7 +1813,7 @@ async def _analyze_with_gemini_stream(
         system_message = _build_system_message(target_type)
         full_prompt = f"{system_message}\n\n{prompt}\n\nJSON only."
         
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')
         
         if progress_tracker:
             await progress_tracker.update(30, "Gemini API 요청 전송 중...")
@@ -1888,29 +1828,16 @@ async def _analyze_with_gemini_stream(
             buffer = ""
             current_section = "executive_summary"
             
-            # Gemini는 스트리밍을 지원하지만, 비동기 실행을 위해 run_in_executor 사용
-            loop = asyncio.get_event_loop()
-            
-            def generate_stream():
-                try:
-                    response = client.models.generate_content_stream(
-                        model=model_name,
-                        contents=full_prompt,
-                        config={
-                            "response_mime_type": "application/json",
-                            "temperature": 0.5
-                        }
-                    )
-                    return response
-                except Exception as e:
-                    logger.warning(f"JSON 모드 스트리밍 실패, 일반 모드로 재시도: {e}")
-                    return client.models.generate_content_stream(
-                        model=model_name,
-                        contents=full_prompt,
-                        config={"temperature": 0.5}
-                    )
-            
-            response_stream = await loop.run_in_executor(None, generate_stream)
+            response_stream = await generate_content_stream_with_fallback(
+                client=client,
+                model=model_name,
+                contents=full_prompt,
+                config={
+                    "response_mime_type": "application/json",
+                    "temperature": 0.5,
+                },
+                logger=logger,
+            )
             
             # 스트리밍 응답 처리
             for chunk in response_stream:

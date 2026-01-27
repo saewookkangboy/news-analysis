@@ -12,6 +12,11 @@ from backend.utils.token_optimizer import (
     optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context,
     parse_json_with_fallback
 )
+from backend.utils.gemini_utils import (
+    generate_content_with_fallback,
+    build_model_candidates,
+    is_model_not_found_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +155,7 @@ async def _analyze_sentiment_with_gemini(
         prompt = _build_sentiment_prompt(target_keyword, additional_context_optimized)
         prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
         
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')
         
         # 시스템 메시지와 프롬프트 결합 (최적화)
         system_message = "You are a senior sentiment analyst. Respond ONLY in valid JSON format."
@@ -165,67 +170,21 @@ async def _analyze_sentiment_with_gemini(
             api_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
             client = genai.Client(api_key=api_key) if api_key else genai.Client()
             
-            loop = asyncio.get_event_loop()
-            try:
-                # JSON 응답 강제 시도 (새로운 API)
-                try:
-                    # config 파라미터 시도
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt,
-                            config={
-                                "response_mime_type": "application/json",
-                                "max_output_tokens": max_output_tokens
-                            }
-                        )
-                    )
-                except (TypeError, AttributeError) as e:
-                    # config가 지원되지 않는 경우 generation_config 시도
-                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {e}")
-                    try:
-                        from google.genai.types import GenerationConfig
-                        gen_config = GenerationConfig(
-                            response_mime_type="application/json",
-                            max_output_tokens=max_output_tokens
-                        )
-                        response = await loop.run_in_executor(
-                            None,
-                            lambda: client.models.generate_content(
-                                model=model_name,
-                                contents=full_prompt,
-                                generation_config=gen_config
-                            )
-                        )
-                    except (TypeError, AttributeError, ImportError) as e2:
-                        # generation_config도 실패하면 일반 모드로 재시도
-                        logger.warning(f"generation_config도 실패, 일반 모드로 재시도: {e2}")
-                        response = await loop.run_in_executor(
-                            None,
-                            lambda: client.models.generate_content(
-                                model=model_name,
-                                contents=full_prompt,
-                                config={
-                                    "max_output_tokens": max_output_tokens
-                                }
-                            )
-                        )
-            except Exception as e:
-                logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: client.models.generate_content(
-                        model=model_name,
-                        contents=full_prompt
-                    )
-                )
+            response = await generate_content_with_fallback(
+                client=client,
+                model=model_name,
+                contents=full_prompt,
+                config={
+                    "response_mime_type": "application/json",
+                    "max_output_tokens": max_output_tokens,
+                },
+                logger=logger,
+            )
             result_text = response.text if hasattr(response, 'text') else str(response)
             
         except ImportError:
             import google.generativeai as genai_old
             genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
-            model = genai_old.GenerativeModel(model_name)
             
             # 시스템 메시지와 프롬프트 결합 (최적화)
             system_message = "You are a senior sentiment analyst. Respond ONLY in valid JSON format."
@@ -333,7 +292,7 @@ async def _analyze_context_with_gemini(
         prompt = _build_context_prompt(target_keyword, additional_context_optimized)
         prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
         
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')
         
         # 시스템 메시지와 프롬프트 결합 (최적화)
         system_message = "You are a senior context analyst. Respond ONLY in valid JSON format."
@@ -348,60 +307,45 @@ async def _analyze_context_with_gemini(
             api_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
             client = genai.Client(api_key=api_key) if api_key else genai.Client()
             
-            loop = asyncio.get_event_loop()
-            try:
-                # JSON 응답 강제 시도
-                try:
-                    # config 파라미터 시도
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt,
-                            config={
-                                "response_mime_type": "application/json",
-                                "max_output_tokens": max_output_tokens
-                            }
-                        )
-                    )
-                except (TypeError, AttributeError) as e:
-                    # config가 지원되지 않는 경우 generation_config 시도
-                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {e}")
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt,
-                            generation_config={
-                                "response_mime_type": "application/json"
-                            }
-                        )
-                    )
-            except Exception as e:
-                logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: client.models.generate_content(
-                        model=model_name,
-                        contents=full_prompt
-                    )
-                )
+            response = await generate_content_with_fallback(
+                client=client,
+                model=model_name,
+                contents=full_prompt,
+                config={
+                    "response_mime_type": "application/json",
+                    "max_output_tokens": max_output_tokens,
+                },
+                logger=logger,
+            )
             result_text = response.text if hasattr(response, 'text') else str(response)
             
         except ImportError:
             import google.generativeai as genai_old
             genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
-            model = genai_old.GenerativeModel(model_name)
             
             # 시스템 메시지와 프롬프트 결합
             system_message = "You are a senior context analyst. Respond ONLY in valid JSON format without markdown code blocks."
             full_prompt_old = f"{system_message}\n\n{prompt}\n\n**중요**: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운 코드 블록을 사용하지 마세요."
             
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: model.generate_content(full_prompt_old)
-            )
+            response = None
+            last_error = None
+            for candidate in build_model_candidates(model_name):
+                try:
+                    if candidate != model_name:
+                        logger.warning(f"GEMINI_MODEL fallback 사용: {candidate}")
+                    model = genai_old.GenerativeModel(candidate)
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: model.generate_content(full_prompt_old)
+                    )
+                    break
+                except Exception as e:
+                    last_error = e
+                    if not is_model_not_found_error(e):
+                        raise
+            if response is None:
+                raise ValueError(f"Gemini API 호출 실패: {str(last_error)}")
             result_text = response.text if hasattr(response, 'text') else str(response)
         
         # 강화된 JSON 파싱 사용
@@ -510,7 +454,7 @@ async def _analyze_tone_with_gemini(
         prompt = _build_tone_prompt(target_keyword, additional_context_optimized)
         prompt = optimize_prompt(prompt, max_length=5000)  # 프롬프트 최적화
         
-        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')
         
         # 시스템 메시지와 프롬프트 결합 (최적화)
         system_message = "You are a senior tone analyst. Respond ONLY in valid JSON format."
@@ -525,44 +469,16 @@ async def _analyze_tone_with_gemini(
             api_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
             client = genai.Client(api_key=api_key) if api_key else genai.Client()
             
-            loop = asyncio.get_event_loop()
-            try:
-                # JSON 응답 강제 시도
-                try:
-                    # config 파라미터 시도
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt,
-                            config={
-                                "response_mime_type": "application/json",
-                                "max_output_tokens": max_output_tokens
-                            }
-                        )
-                    )
-                except (TypeError, AttributeError) as e:
-                    # config가 지원되지 않는 경우 generation_config 시도
-                    logger.warning(f"config 파라미터 미지원, generation_config 시도: {e}")
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: client.models.generate_content(
-                            model=model_name,
-                            contents=full_prompt,
-                            generation_config={
-                                "response_mime_type": "application/json"
-                            }
-                        )
-                    )
-            except Exception as e:
-                logger.warning(f"JSON 응답 강제 실패, 일반 모드로 재시도: {e}")
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: client.models.generate_content(
-                        model=model_name,
-                        contents=full_prompt
-                    )
-                )
+            response = await generate_content_with_fallback(
+                client=client,
+                model=model_name,
+                contents=full_prompt,
+                config={
+                    "response_mime_type": "application/json",
+                    "max_output_tokens": max_output_tokens,
+                },
+                logger=logger,
+            )
             result_text = response.text if hasattr(response, 'text') else str(response)
             
         except ImportError:
@@ -579,15 +495,29 @@ async def _analyze_tone_with_gemini(
             max_output_tokens_old = get_max_tokens_for_model(model_name, full_prompt_tokens_old)
             
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: model.generate_content(
-                    full_prompt_old,
-                    generation_config={
-                        "max_output_tokens": max_output_tokens_old
-                    }
-                )
-            )
+            response = None
+            last_error = None
+            for candidate in build_model_candidates(model_name):
+                try:
+                    if candidate != model_name:
+                        logger.warning(f"GEMINI_MODEL fallback 사용: {candidate}")
+                    model = genai_old.GenerativeModel(candidate)
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: model.generate_content(
+                            full_prompt_old,
+                            generation_config={
+                                "max_output_tokens": max_output_tokens_old
+                            }
+                        )
+                    )
+                    break
+                except Exception as e:
+                    last_error = e
+                    if not is_model_not_found_error(e):
+                        raise
+            if response is None:
+                raise ValueError(f"Gemini API 호출 실패: {str(last_error)}")
             result_text = response.text if hasattr(response, 'text') else str(response)
         
         # 마크다운 코드 블록 제거
