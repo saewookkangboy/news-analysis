@@ -571,7 +571,7 @@ async def root():
         
         <script>
             // 기본 날짜 설정 (최근 3개월) 및 URL 파라미터 처리
-            window.addEventListener('DOMContentLoaded', function() {
+            window.addEventListener("DOMContentLoaded", function() {
                 const today = new Date();
                 const threeMonthsAgo = new Date();
                 threeMonthsAgo.setMonth(today.getMonth() - 3);
@@ -579,90 +579,96 @@ async def root():
                 // URL 파라미터 읽기
                 const urlParams = new URLSearchParams(window.location.search);
                 
-                const targetKeywordInput = document.getElementById('target_keyword');
-                const targetTypeSelect = document.getElementById('target_type');
-                const startDateInput = document.getElementById('start_date');
-                const endDateInput = document.getElementById('end_date');
-                const additionalContextInput = document.getElementById('additional_context');
-                const useGeminiCheckbox = document.getElementById('use_gemini');
+                const targetKeywordInput = document.getElementById("target_keyword");
+                const targetTypeSelect = document.getElementById("target_type");
+                const startDateInput = document.getElementById("start_date");
+                const endDateInput = document.getElementById("end_date");
+                const additionalContextInput = document.getElementById("additional_context");
+                const useGeminiCheckbox = document.getElementById("use_gemini");
                 
                 // URL 파라미터로 폼 채우기
-                if (urlParams.has('target_keyword') && targetKeywordInput) {
-                    targetKeywordInput.value = decodeURIComponent(urlParams.get('target_keyword'));
+                if (urlParams.has("target_keyword") && targetKeywordInput) {
+                    const keywordValue = urlParams.get("target_keyword");
+                    if (keywordValue) {
+                        targetKeywordInput.value = decodeURIComponent(keywordValue);
+                    }
                 }
                 
-                if (urlParams.has('target_type') && targetTypeSelect) {
-                    targetTypeSelect.value = urlParams.get('target_type');
+                if (urlParams.has("target_type") && targetTypeSelect) {
+                    targetTypeSelect.value = urlParams.get("target_type");
                 }
                 
-                if (urlParams.has('start_date') && startDateInput) {
-                    startDateInput.value = urlParams.get('start_date');
+                if (urlParams.has("start_date") && startDateInput) {
+                    startDateInput.value = urlParams.get("start_date");
                 } else if (startDateInput) {
-                    startDateInput.value = threeMonthsAgo.toISOString().split('T')[0];
+                    startDateInput.value = threeMonthsAgo.toISOString().split("T")[0];
                 }
                 
-                if (urlParams.has('end_date') && endDateInput) {
-                    endDateInput.value = urlParams.get('end_date');
+                if (urlParams.has("end_date") && endDateInput) {
+                    endDateInput.value = urlParams.get("end_date");
                 } else if (endDateInput) {
-                    endDateInput.value = today.toISOString().split('T')[0];
+                    endDateInput.value = today.toISOString().split("T")[0];
                 }
                 
-                if (urlParams.has('additional_context') && additionalContextInput) {
-                    additionalContextInput.value = decodeURIComponent(urlParams.get('additional_context'));
+                if (urlParams.has("additional_context") && additionalContextInput) {
+                    const contextValue = urlParams.get("additional_context");
+                    if (contextValue) {
+                        additionalContextInput.value = decodeURIComponent(contextValue);
+                    }
                 }
                 
-                if (urlParams.has('use_gemini') && useGeminiCheckbox) {
-                    useGeminiCheckbox.checked = urlParams.get('use_gemini') === 'on' || urlParams.get('use_gemini') === 'true';
+                if (urlParams.has("use_gemini") && useGeminiCheckbox) {
+                    useGeminiCheckbox.checked = urlParams.get("use_gemini") === "on" || urlParams.get("use_gemini") === "true";
                 }
             });
             
             // 클립보드 복사 함수
             function copyToClipboard() {
-                const resultContent = document.getElementById('resultContent');
+                const resultContent = document.getElementById("resultContent");
                 const text = resultContent.textContent;
                 
                 navigator.clipboard.writeText(text).then(function() {
-                    const copyBtn = document.getElementById('copyBtn');
+                    const copyBtn = document.getElementById("copyBtn");
                     const originalText = copyBtn.textContent;
-                    copyBtn.textContent = '복사됨!';
-                    copyBtn.style.background = '#333333';
+                    copyBtn.textContent = "복사됨!";
+                    copyBtn.style.background = "#333333";
                     
                     setTimeout(function() {
                         copyBtn.textContent = originalText;
-                        copyBtn.style.background = 'black';
+                        copyBtn.style.background = "black";
                     }, 2000);
                 }).catch(function(err) {
-                    console.error('복사 실패:', err);
-                    alert('복사에 실패했습니다. 수동으로 선택하여 복사해주세요.');
+                    console.error("복사 실패:", err);
+                    alert("복사에 실패했습니다. 수동으로 선택하여 복사해주세요.");
                 });
             }
             
-            document.getElementById('analysisForm').addEventListener('submit', async function(e) {
+            document.getElementById("analysisForm").addEventListener("submit", async function(e) {
                 e.preventDefault();
                 
                 const form = e.target;
-                const loading = document.getElementById('loading');
-                const error = document.getElementById('error');
-                const resultSection = document.getElementById('resultSection');
-                const resultContent = document.getElementById('resultContent');
-                const analyzeBtn = document.getElementById('analyzeBtn');
-                const emptyState = document.getElementById('emptyState');
+                const loading = document.getElementById("loading");
+                const error = document.getElementById("error");
+                const resultSection = document.getElementById("resultSection");
+                const resultContent = document.getElementById("resultContent");
+                const analyzeBtn = document.getElementById("analyzeBtn");
+                const emptyState = document.getElementById("emptyState");
                 
                 // 초기화
-                loading.classList.add('show');
-                error.classList.remove('show');
-                resultSection.classList.remove('show');
-                emptyState.style.display = 'none';
+                loading.classList.add("show");
+                error.classList.remove("show");
+                resultSection.classList.remove("show");
+                emptyState.style.display = "none";
                 analyzeBtn.disabled = true;
                 
                 // 진행률 표시 초기화 및 표시
-                const progressContainer = document.getElementById('progressContainer');
-                const progressBar = document.getElementById('progressBar');
-                const progressPercentage = document.getElementById('progressPercentage');
-                const progressStep = document.getElementById('progressStep');
+                const progressContainer = document.getElementById("progressContainer");
+                const progressBar = document.getElementById("progressBar");
+                const progressPercentage = document.getElementById("progressPercentage");
+                const progressStep = document.getElementById("progressStep");
                 
                 if (progressContainer) {
-                    progressContainer.style.display = 'block';
+                    progressContainer.style.display = "block";
                 }
                 if (progressBar) {
                     progressBar.style.width = '0%';
@@ -676,48 +682,50 @@ async def root():
                 }
                 
                 // 폼 데이터 수집
-                const startDate = document.getElementById('start_date').value;
-                const endDate = document.getElementById('end_date').value;
+                const startDate = document.getElementById("start_date").value;
+                const endDate = document.getElementById("end_date").value;
                 
                 // 날짜 유효성 검사
                 if (!startDate || !endDate) {
-                    error.textContent = '시작일과 종료일을 모두 입력해주세요.';
-                    error.classList.add('show');
-                    loading.classList.remove('show');
+                    error.textContent = "시작일과 종료일을 모두 입력해주세요.";
+                    error.classList.add("show");
+                    loading.classList.remove("show");
                     analyzeBtn.disabled = false;
                     return;
                 }
                 
                 if (new Date(startDate) > new Date(endDate)) {
-                    error.textContent = '시작일은 종료일보다 이전이어야 합니다.';
-                    error.classList.add('show');
-                    loading.classList.remove('show');
+                    error.textContent = "시작일은 종료일보다 이전이어야 합니다.";
+                    error.classList.add("show");
+                    loading.classList.remove("show");
                     analyzeBtn.disabled = false;
                     return;
                 }
                 
                 const formData = {
-                    target_keyword: document.getElementById('target_keyword').value,
-                    target_type: document.getElementById('target_type').value,
-                    additional_context: document.getElementById('additional_context').value || null,
-                    use_gemini: document.getElementById('use_gemini').checked,
+                    target_keyword: document.getElementById("target_keyword").value,
+                    target_type: document.getElementById("target_type").value,
+                    additional_context: document.getElementById("additional_context").value || null,
+                    use_gemini: document.getElementById("use_gemini").checked,
                     start_date: startDate,
-                    end_date: endDate
+                    end_date: endDate,
+                    include_sentiment: true,
+                    include_recommendations: true
                 };
                 
                 try {
                     // 분석 단계별 진행률 정의
                     const analysisSteps = [
-                        { progress: 5, step: '분석 준비 중...' },
-                        { progress: 10, step: '프롬프트 생성 중...' },
-                        { progress: 15, step: formData.use_gemini ? 'Gemini API 호출 중...' : 'OpenAI API 호출 중...' },
-                        { progress: 30, step: 'AI API 요청 전송 중...' },
-                        { progress: 50, step: 'AI 응답 대기 중...' },
-                        { progress: 70, step: 'AI 응답 수신 완료, 결과 파싱 중...' },
-                        { progress: 80, step: 'JSON 파싱 완료, 결과 정리 중...' },
-                        { progress: 90, step: formData.include_sentiment ? '정성적 분석 수행 중...' : '결과 정리 중...' },
-                        { progress: 95, step: formData.include_recommendations ? '키워드 추천 생성 중...' : '결과 정리 중...' },
-                        { progress: 100, step: '분석 완료' }
+                        { progress: 5, step: "분석 준비 중..." },
+                        { progress: 10, step: "프롬프트 생성 중..." },
+                        { progress: 15, step: formData.use_gemini ? "Gemini API 호출 중..." : "OpenAI API 호출 중..." },
+                        { progress: 30, step: "AI API 요청 전송 중..." },
+                        { progress: 50, step: "AI 응답 대기 중..." },
+                        { progress: 70, step: "AI 응답 수신 완료, 결과 파싱 중..." },
+                        { progress: 80, step: "JSON 파싱 완료, 결과 정리 중..." },
+                        { progress: 90, step: formData.include_sentiment ? "정성적 분석 수행 중..." : "결과 정리 중..." },
+                        { progress: 95, step: formData.include_recommendations ? "키워드 추천 생성 중..." : "결과 정리 중..." },
+                        { progress: 100, step: "분석 완료" }
                     ];
                     
                     let currentStepIndex = 0;
@@ -745,22 +753,22 @@ async def root():
                     
                     // API URL 설정 (스트리밍 엔드포인트 사용)
                     const apiBaseUrl = window.location.origin;
-                    const apiUrl = apiBaseUrl + '/api/target/analyze/stream';
+                    const apiUrl = apiBaseUrl + "/api/target/analyze/stream";
                     
-                    console.log('API 스트리밍 호출:', apiUrl, formData);
+                    console.log("API 스트리밍 호출:", apiUrl, formData);
                     
                     // 결과 컨텐츠 초기화 및 표시
-                    resultSection.classList.add('show');
-                    resultContent.innerHTML = '';
-                    resultContent.style.display = 'block';
+                    resultSection.classList.add("show");
+                    resultContent.innerHTML = "";
+                    resultContent.style.display = "block";
                     
                     let accumulatedResult = null;
-                    let currentSection = 'executive_summary';
+                    let currentSection = "executive_summary";
                     const sectionHeaders = {
-                        'executive_summary': '## 📋 Executive Summary\n\n',
-                        'key_findings': '\n## 🔍 Key Findings\n\n',
-                        'detailed_analysis': '\n## 📊 Detailed Analysis\n\n',
-                        'strategic_recommendations': '\n## 💡 Strategic Recommendations\n\n'
+                        "executive_summary": "## 📋 Executive Summary\n\n",
+                        "key_findings": "\n## 🔍 Key Findings\n\n",
+                        "detailed_analysis": "\n## 📊 Detailed Analysis\n\n",
+                        "strategic_recommendations": "\n## 💡 Strategic Recommendations\n\n"
                     };
                     
                     // 섹션 헤더 추가 함수
@@ -771,32 +779,32 @@ async def root():
                     }
                     
                     const response = await fetch(apiUrl, {
-                        method: 'POST',
+                        method: "POST",
                         headers: {
-                            'Content-Type': 'application/json',
+                            "Content-Type": "application/json",
                         },
                         body: JSON.stringify(formData)
                     });
                     
                     clearInterval(progressInterval);
                     
-                    console.log('API 스트리밍 응답 상태:', response.status, response.statusText);
+                    console.log("API 스트리밍 응답 상태:", response.status, response.statusText);
                     
                     if (!response.ok) {
                         let errorData = {};
                         try {
                             errorData = await response.json();
                         } catch (e) {
-                            errorData = { detail: await response.text() || '분석 요청 실패' };
+                            errorData = { detail: await response.text() || "분석 요청 실패" };
                         }
-                        console.error('API 오류:', errorData);
-                        throw new Error(errorData.detail || errorData.error || errorData.message || '분석 요청 실패');
+                        console.error("API 오류:", errorData);
+                        throw new Error(errorData.detail || errorData.error || errorData.message || "분석 요청 실패");
                     }
                     
                     // 스트리밍 응답 읽기
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
-                    let buffer = '';
+                    let buffer = "";
                     
                     while (true) {
                         const { done, value } = await reader.read();
@@ -809,8 +817,8 @@ async def root():
                         buffer += decoder.decode(value, { stream: true });
                         
                         // 줄 단위로 분리하여 처리
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop() || ''; // 마지막 불완전한 줄은 버퍼에 유지
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop() || ""; // 마지막 불완전한 줄은 버퍼에 유지
                         
                         for (const line of lines) {
                             if (!line.trim()) {
@@ -819,11 +827,11 @@ async def root():
                             
                             try {
                                 const chunk = JSON.parse(line);
-                                console.log('스트리밍 청크:', chunk);
+                                console.log("스트리밍 청크:", chunk);
                                 
                                 // 문장 타입 처리
-                                if (chunk.type === 'sentence') {
-                                    const section = chunk.section || 'executive_summary';
+                                if (chunk.type === "sentence") {
+                                    const section = chunk.section || "executive_summary";
                                     
                                     // 섹션이 변경되면 헤더 추가
                                     if (section !== currentSection) {
@@ -832,54 +840,54 @@ async def root():
                                     }
                                     
                                     // 문장 추가 (실시간 표시)
-                                    resultContent.textContent += chunk.content + ' ';
+                                    resultContent.textContent += chunk.content + " ";
                                     
                                     // 스크롤을 맨 아래로
                                     resultContent.scrollTop = resultContent.scrollHeight;
                                 }
                                 // 진행 상황 처리
-                                else if (chunk.type === 'progress') {
+                                else if (chunk.type === "progress") {
                                     if (progressBar) {
-                                        progressBar.style.width = chunk.progress + '%';
-                                        progressBar.textContent = chunk.progress + '%';
+                                        progressBar.style.width = chunk.progress + "%";
+                                        progressBar.textContent = chunk.progress + "%";
                                     }
                                     if (progressPercentage) {
-                                        progressPercentage.textContent = chunk.progress + '%';
+                                        progressPercentage.textContent = chunk.progress + "%";
                                     }
                                     if (progressStep) {
-                                        progressStep.textContent = chunk.message || '분석 중...';
+                                        progressStep.textContent = chunk.message || "분석 중...";
                                     }
                                 }
                                 // 완료 처리
-                                else if (chunk.type === 'complete') {
+                                else if (chunk.type === "complete") {
                                     accumulatedResult = chunk.data;
                                     
                                     if (progressBar) {
-                                        progressBar.style.width = '100%';
-                                        progressBar.textContent = '100%';
+                                        progressBar.style.width = "100%";
+                                        progressBar.textContent = "100%";
                                     }
                                     if (progressPercentage) {
-                                        progressPercentage.textContent = '100%';
+                                        progressPercentage.textContent = "100%";
                                     }
                                     if (progressStep) {
-                                        progressStep.textContent = '분석 완료';
+                                        progressStep.textContent = "분석 완료";
                                     }
                                     
                                     // 최종 결과가 있으면 추가 정보 표시
                                     if (chunk.data) {
                                         // 이미 표시된 내용 외에 추가 정보가 있으면 표시
                                         // (예: key_findings, detailed_analysis 등)
-                                        console.log('최종 결과 수신:', chunk.data);
+                                        console.log("최종 결과 수신:", chunk.data);
                                     }
                                     
                                     break;
                                 }
                                 // 오류 처리
-                                else if (chunk.type === 'error') {
-                                    throw new Error(chunk.message || '알 수 없는 오류가 발생했습니다.');
+                                else if (chunk.type === "error") {
+                                    throw new Error(chunk.message || "알 수 없는 오류가 발생했습니다.");
                                 }
                             } catch (parseError) {
-                                console.warn('JSON 파싱 실패:', line, parseError);
+                                console.warn("JSON 파싱 실패:", line, parseError);
                             }
                         }
                     }
@@ -888,19 +896,19 @@ async def root():
                     if (buffer.trim()) {
                         try {
                             const chunk = JSON.parse(buffer);
-                            if (chunk.type === 'sentence') {
-                                const section = chunk.section || 'executive_summary';
+                            if (chunk.type === "sentence") {
+                                const section = chunk.section || "executive_summary";
                                 if (section !== currentSection) {
                                     addSectionHeader(section);
                                     currentSection = section;
                                 }
-                                resultContent.textContent += chunk.content + ' ';
+                                resultContent.textContent += chunk.content + " ";
                                 resultContent.scrollTop = resultContent.scrollHeight;
-                            } else if (chunk.type === 'complete') {
+                            } else if (chunk.type === "complete") {
                                 accumulatedResult = chunk.data;
                             }
                         } catch (parseError) {
-                            console.warn('버퍼 파싱 실패:', buffer, parseError);
+                            console.warn("버퍼 파싱 실패:", buffer, parseError);
                         }
                     }
                     
@@ -910,38 +918,38 @@ async def root():
                         data: accumulatedResult
                     } : {
                         success: false,
-                        error: '분석 결과를 받지 못했습니다.'
+                        error: "분석 결과를 받지 못했습니다."
                     };
                     
-                    console.log('최종 분석 결과:', data);
+                    console.log("최종 분석 결과:", data);
                     
                     // 최종 진행률 업데이트 (이미 선언된 변수 사용)
                     if (progressBar) {
-                        progressBar.style.width = '100%';
-                        progressBar.textContent = '100%';
+                        progressBar.style.width = "100%";
+                        progressBar.textContent = "100%";
                     }
                     if (progressPercentage) {
-                        progressPercentage.textContent = '100%';
+                        progressPercentage.textContent = "100%";
                     }
                     if (progressStep) {
-                        progressStep.textContent = '분석 완료';
+                        progressStep.textContent = "분석 완료";
                     }
                     
                     // 진행률 정보가 있으면 표시
                     if (data.data && data.data.progress_info) {
                         const progressInfo = data.data.progress_info;
                         if (progressStep) {
-                            progressStep.textContent = progressInfo.current_step || '분석 완료';
+                            progressStep.textContent = progressInfo.current_step || "분석 완료";
                         }
                     }
                     
                     if (data.success && data.data) {
                         // 결과를 Markdown 형식으로 포맷팅
-                        let resultText = '';
+                        let resultText = "";
                         let analysisData = null;
                         
                         // 디버깅: 받은 데이터 로깅
-                        console.log('API 응답 받음:', {
+                        console.log("API 응답 받음:", {
                             success: data.success,
                             hasData: !!data.data,
                             dataType: typeof data.data,
@@ -949,25 +957,25 @@ async def root():
                         });
                         
                         // JSON 데이터 파싱 - 여러 구조 지원
-                        console.log('받은 데이터 구조:', Object.keys(data.data || {}));
+                        console.log("받은 데이터 구조:", Object.keys(data.data || {}));
                         
                         // data.data를 기본으로 사용하고, analysis 필드가 있으면 병합
-                        if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+                        if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
                             // data.data를 기본으로 사용
                             analysisData = { ...data.data };
                             
                             // analysis 필드가 있고 그것이 객체인 경우 병합
-                            if (data.data.analysis && typeof data.data.analysis === 'object') {
+                            if (data.data.analysis && typeof data.data.analysis === "object") {
                                 analysisData = { ...analysisData, ...data.data.analysis };
-                                console.log('analysis 필드 병합:', Object.keys(analysisData));
+                                console.log("analysis 필드 병합:", Object.keys(analysisData));
                             }
                             // analysis 필드가 문자열인 경우 (JSON 파싱 후 병합)
-                            else if (data.data.analysis && typeof data.data.analysis === 'string') {
+                            else if (data.data.analysis && typeof data.data.analysis === "string") {
                                 try {
                                     let cleanAnalysis = data.data.analysis;
                                     // 마크다운 코드 블록 제거
-                                    const codeBlockStart = '```json';
-                                    const codeBlockEnd = '```';
+                                    const codeBlockStart = "```json";
+                                    const codeBlockEnd = "```";
                                     if (cleanAnalysis.includes(codeBlockStart)) {
                                         const startIdx = cleanAnalysis.indexOf(codeBlockStart);
                                         const endIdx = cleanAnalysis.lastIndexOf(codeBlockEnd);
@@ -977,32 +985,32 @@ async def root():
                                                           cleanAnalysis.substring(endIdx + codeBlockEnd.length);
                                         }
                                     }
-                                    cleanAnalysis = cleanAnalysis.replace(/```/g, '').trim();
+                                    cleanAnalysis = cleanAnalysis.replace(/```/g, "").trim();
                                     const parsedAnalysis = JSON.parse(cleanAnalysis);
                                     // 파싱된 analysis와 병합 (analysis 필드 내용이 우선)
                                     analysisData = { ...analysisData, ...parsedAnalysis };
-                                    console.log('JSON 파싱 후 병합:', Object.keys(analysisData));
+                                    console.log("JSON 파싱 후 병합:", Object.keys(analysisData));
                                 } catch (parseError) {
-                                    console.warn('JSON 파싱 실패, analysis 필드 무시:', parseError);
+                                    console.warn("JSON 파싱 실패, analysis 필드 무시:", parseError);
                                     // 파싱 실패 시 analysis 필드는 무시하고 data.data만 사용
                                 }
                             }
                             
-                            console.log('최종 analysisData 구조:', Object.keys(analysisData));
+                            console.log("최종 analysisData 구조:", Object.keys(analysisData));
                         }
                         // data가 직접 분석 결과인 경우
                         else if (data.executive_summary || data.key_findings || data.detailed_analysis) {
                             analysisData = data;
-                            console.log('data 직접 사용:', Object.keys(analysisData));
+                            console.log("data 직접 사용:", Object.keys(analysisData));
                         }
                         // 그 외의 경우
                         else {
-                            console.warn('알 수 없는 데이터 구조:', data);
+                            console.warn("알 수 없는 데이터 구조:", data);
                             analysisData = data.data || data || {};
                         }
                         
-                        console.log('파싱된 analysisData 최종 구조:', Object.keys(analysisData || {}));
-                        console.log('analysisData 상세 (일부):', JSON.stringify({
+                        console.log("파싱된 analysisData 최종 구조:", Object.keys(analysisData || {}));
+                        console.log("analysisData 상세 (일부):", JSON.stringify({
                             executive_summary: analysisData?.executive_summary?.substring(0, 100),
                             has_key_findings: !!analysisData?.key_findings,
                             has_detailed_analysis: !!analysisData?.detailed_analysis,
@@ -1016,9 +1024,9 @@ async def root():
                         const targetKeyword = formData.target_keyword;
                         const targetType = formData.target_type;
                         const typeNames = {
-                            'keyword': '키워드',
-                            'audience': '오디언스',
-                            'comprehensive': '종합'
+                            "keyword": "키워드",
+                            "audience": "오디언스",
+                            "comprehensive": "종합"
                         };
                         
                         resultText = `# 타겟 분석 보고서\\n\\n`;
@@ -1996,7 +2004,7 @@ async def root():
                             resultText += `- analysisData 키: ${Object.keys(analysisData || {}).join(', ')}\\n`;
                             resultText += `- data.data 키: ${Object.keys(data.data || {}).join(', ')}\\n\\n`;
                             resultText += `**전체 응답 구조**:\\n`;
-                            resultText += '```json\\n' + JSON.stringify({success: data.success, dataKeys: Object.keys(data.data || {}), analysisDataKeys: Object.keys(analysisData || {})}, null, 2) + '\\n```\\n\\n';
+                            resultText += "```json\\n" + JSON.stringify({success: data.success, dataKeys: Object.keys(data.data || {}), analysisDataKeys: Object.keys(analysisData || {})}, null, 2) + "\\n```\\n\\n";
                             resultText += `**해결 방법**:\\n`;
                             resultText += `1. AI API 키가 설정되어 있는지 확인하세요 (OpenAI 또는 Gemini)\\n`;
                             resultText += `2. 서버 로그를 확인하세요\\n`;
@@ -2007,17 +2015,17 @@ async def root():
                         resultText += `*본 보고서는 AI 기반 분석 결과입니다.*\\n`;
                         
                         resultContent.textContent = resultText;
-                        resultSection.classList.add('show');
-                        emptyState.style.display = 'none';
+                        resultSection.classList.add("show");
+                        emptyState.style.display = "none";
                     } else {
-                        throw new Error('분석 결과를 받지 못했습니다.');
+                        throw new Error("분석 결과를 받지 못했습니다.");
                     }
                 } catch (err) {
-                    error.textContent = '오류: ' + err.message;
-                    error.classList.add('show');
-                    emptyState.style.display = 'none';
+                    error.textContent = "오류: " + err.message;
+                    error.classList.add("show");
+                    emptyState.style.display = "none";
                 } finally {
-                    loading.classList.remove('show');
+                    loading.classList.remove("show");
                     analyzeBtn.disabled = false;
                 }
             });

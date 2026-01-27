@@ -50,4 +50,6 @@ const apiUrl = apiBaseUrl + '/api/target/analyze/stream';
 
 ## 참고 사항
 
-다른 템플릿 리터럴들(`resultText += \`...\``)은 Python 문자열 내에서 이스케이프가 제대로 되어 있어 문제가 없습니다. 하지만 추가 오류가 발생하면 해당 부분도 일반 문자열 연결로 변경할 수 있습니다.
+`backend/main.py`에는 많은 JavaScript 템플릿 리터럴이 Python 문자열 내에 포함되어 있습니다. 일부 인스턴스는 이스케이프되어 있지만, 다른 템플릿 리터럴들은 백틱 보간을 사용하고 있습니다 (예: `` resultText += `**분석 대상**: ${targetKeyword}\\n`; ``, `` resultText += `**분석 기간**: ${formData.start_date} ~ ${formData.end_date}\\n`; `` 등).
+
+이러한 `${}` 보간이 포함된 템플릿 리터럴들은 Python 문자열 내에서 제대로 이스케이프되지 않으면 Python 문자열 구문 오류를 일으킬 수 있습니다. 현재는 Python 문자열 내의 JavaScript 코드 블록으로 처리되어 작동하고 있지만, 추가 오류가 발생하면 해당 부분들을 일반 문자열 연결(예: `resultText += '**분석 대상**: ' + targetKeyword + '\\n';`)로 변경하는 것을 고려해야 합니다.
