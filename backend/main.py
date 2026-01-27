@@ -714,7 +714,7 @@ async def root():
                     
                     // API URL 설정 (스트리밍 엔드포인트 사용)
                     const apiBaseUrl = window.location.origin;
-                    const apiUrl = `${apiBaseUrl}/api/target/analyze/stream`;
+                    const apiUrl = apiBaseUrl + '/api/target/analyze/stream';
                     
                     console.log('API 스트리밍 호출:', apiUrl, formData);
                     
