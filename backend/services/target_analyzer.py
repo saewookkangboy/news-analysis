@@ -1,16 +1,18 @@
 """
 타겟 분석 서비스
-AI를 사용하여 키워드, 오디언스, 경쟁자 분석을 수행합니다.
+AI를 사용하여 키워드, 오디언스, 종합 분석을 수행합니다.
 """
 import os
 import logging
-from typing import Optional, Dict, Any
+import re
+from typing import Optional, Dict, Any, AsyncGenerator
 import json
 
 from backend.config import settings
 from backend.services.progress_tracker import ProgressTracker
 from backend.utils.token_optimizer import (
-    optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context
+    optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context,
+    extract_and_fix_json, parse_json_with_fallback
 )
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ async def analyze_target(
     
     Args:
         target_keyword: 분석할 타겟 키워드 또는 주제
-        target_type: 분석 유형 (keyword, audience, competitor)
+        target_type: 분석 유형 (keyword, audience, comprehensive)
         additional_context: 추가 컨텍스트 정보
         use_gemini: Gemini API 사용 여부 (True일 경우 OpenAI + Gemini 보완 분석)
         start_date: 분석 시작일 (YYYY-MM-DD 형식)
@@ -249,18 +251,18 @@ async def _analyze_with_gemini(
         logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')}")
         logger.info("=" * 60)
         
-        # 프롬프트 생성 및 최적화
-        additional_context_optimized = optimize_additional_context(additional_context, max_length=500)
+        # 프롬프트 생성 및 최적화 (토큰 최적화 강화)
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
         
-        # 토큰 최적화 적용
+        # 토큰 최적화 적용 (더 공격적으로)
+        prompt = optimize_prompt(prompt, max_length=4000)  # 프롬프트 최대 4000자로 제한 (기존 8000에서 절반)
         prompt_tokens = estimate_tokens(prompt)
-        prompt = optimize_prompt(prompt, max_length=8000)  # 프롬프트 최대 8000자로 제한
         
         # 모델 설정 (기본값: gemini-2.5-flash)
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         logger.info(f"Gemini API 클라이언트 초기화 중... (모델: {model_name})")
-        logger.info(f"프롬프트 토큰 추정: {prompt_tokens}, 최적화 후 길이: {len(prompt)} 문자")
+        logger.info(f"토큰 최적화: 프롬프트 {prompt_tokens} 토큰, 길이: {len(prompt)} 문자")
         
         # 새로운 Gemini API 방식 시도 (from google import genai)
         try:
@@ -274,14 +276,13 @@ async def _analyze_with_gemini(
                 # 환경 변수에서 자동으로 가져오기
                 client = genai.Client()
             
-            # 시스템 메시지와 프롬프트 결합 (최적화)
+            # 시스템 메시지와 프롬프트 결합 (이미 간소화됨)
             system_message = _build_system_message(target_type)
-            system_message = optimize_prompt(system_message, max_length=500)  # 시스템 메시지도 최적화
-            full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+            full_prompt = f"{system_message}\n\n{prompt}\n\nJSON only."
             
-            # 토큰 수 계산 및 max_tokens 설정
+            # 토큰 수 계산 및 max_tokens 설정 (출력 토큰 제한)
             full_prompt_tokens = estimate_tokens(full_prompt)
-            max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
+            max_output_tokens = min(get_max_tokens_for_model(model_name, full_prompt_tokens), 3000)  # 최대 3000 토큰으로 제한하여 속도 향상
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
             logger.info("=" * 60)
@@ -304,7 +305,8 @@ async def _analyze_with_gemini(
                             contents=full_prompt,
                             config={
                                 "response_mime_type": "application/json",
-                                "max_output_tokens": max_output_tokens
+                                "max_output_tokens": max_output_tokens,
+                                "temperature": 0.5  # 속도 향상을 위해 낮춤
                             }
                         )
                     )
@@ -322,7 +324,8 @@ async def _analyze_with_gemini(
                                 contents=full_prompt,
                                 generation_config={
                                     "response_mime_type": "application/json",
-                                    "max_output_tokens": max_output_tokens
+                                    "max_output_tokens": max_output_tokens,
+                                    "temperature": 0.5  # 0.7에서 0.5로 낮춰서 더 빠르고 일관된 응답
                                 }
                             )
                         )
@@ -336,7 +339,8 @@ async def _analyze_with_gemini(
                                 model=model_name,
                                 contents=full_prompt,
                                 config={
-                                    "max_output_tokens": max_output_tokens
+                                    "max_output_tokens": max_output_tokens,
+                                    "temperature": 0.5  # 속도 향상을 위해 낮춤
                                 }
                             )
                         )
@@ -348,10 +352,14 @@ async def _analyze_with_gemini(
                 # JSON 응답 강제가 실패하면 일반 모드로 재시도
                 try:
                     response = await loop.run_in_executor(
-                        None, 
+                        None,
                         lambda: client.models.generate_content(
                             model=model_name,
-                            contents=full_prompt
+                            contents=full_prompt,
+                            generation_config={
+                                "temperature": 0.5,  # 속도 향상을 위해 낮춤
+                                "max_output_tokens": max_output_tokens
+                            }
                         )
                     )
                     logger.info("✅ 일반 모드로 Gemini API 응답 수신 완료")
@@ -376,12 +384,11 @@ async def _analyze_with_gemini(
             
             # 시스템 메시지와 프롬프트 결합 (최적화)
             system_message = _build_system_message(target_type)
-            system_message = optimize_prompt(system_message, max_length=500)
-            full_prompt = f"{system_message}\n\n{prompt}\n\nJSON 형식으로만 응답하세요."
+            full_prompt = f"{system_message}\n\n{prompt}\n\nJSON only."
             
-            # 토큰 수 계산
+            # 토큰 수 계산 및 max_tokens 설정 (출력 토큰 제한)
             full_prompt_tokens = estimate_tokens(full_prompt)
-            max_output_tokens = get_max_tokens_for_model(model_name, full_prompt_tokens)
+            max_output_tokens = min(get_max_tokens_for_model(model_name, full_prompt_tokens), 3000)  # 최대 3000 토큰으로 제한하여 속도 향상
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
             loop = asyncio.get_event_loop()
@@ -390,14 +397,23 @@ async def _analyze_with_gemini(
                 # google.generativeai에서는 generation_config 사용
                 try:
                     # GenerationConfig 객체 사용 시도
+                    if hasattr(genai_old, 'types') and hasattr(genai_old.types, 'GenerationConfig'):
+                        gen_config = genai_old.types.GenerationConfig(
+                            response_mime_type="application/json",
+                            max_output_tokens=max_output_tokens,
+                            temperature=0.5
+                        )
+                    else:
+                        gen_config = {
+                            "response_mime_type": "application/json",
+                            "max_output_tokens": max_output_tokens,
+                            "temperature": 0.5
+                        }
                     response = await loop.run_in_executor(
                         None, 
                         lambda: model.generate_content(
                             full_prompt,
-                            generation_config=genai_old.types.GenerationConfig(
-                                response_mime_type="application/json",
-                                max_output_tokens=max_output_tokens
-                            )
+                            generation_config=gen_config
                         )
                     )
                 except (AttributeError, TypeError):
@@ -408,7 +424,8 @@ async def _analyze_with_gemini(
                             full_prompt,
                             generation_config={
                                 "response_mime_type": "application/json",
-                                "max_output_tokens": max_output_tokens
+                                "max_output_tokens": max_output_tokens,
+                                "temperature": 0.5  # 속도 향상을 위해 낮춤
                             }
                         )
                     )
@@ -420,8 +437,14 @@ async def _analyze_with_gemini(
                 # JSON 응답 강제가 실패하면 일반 모드로 재시도
                 try:
                     response = await loop.run_in_executor(
-                        None, 
-                        lambda: model.generate_content(full_prompt)
+                        None,
+                        lambda: model.generate_content(
+                            full_prompt,
+                            generation_config={
+                                "temperature": 0.5,  # 속도 향상을 위해 낮춤
+                                "max_output_tokens": 3000  # 출력 토큰 제한
+                            }
+                        )
                     )
                     logger.info("✅ 일반 모드로 Gemini API 응답 수신 완료")
                 except Exception as e2:
@@ -443,80 +466,42 @@ async def _analyze_with_gemini(
         if not result_text:
             raise ValueError("Gemini API 응답이 비어있습니다.")
         
-        # 마크다운 코드 블록 제거
-        clean_text = result_text.strip()
-        if clean_text.startswith("```json"):
-            clean_text = clean_text[7:]  # ```json 제거
-        if clean_text.startswith("```"):
-            clean_text = clean_text[3:]  # ``` 제거
-        if clean_text.endswith("```"):
-            clean_text = clean_text[:-3]  # 끝의 ``` 제거
-        clean_text = clean_text.strip()
-        
+        # 강화된 JSON 파싱 사용
         try:
-            result = json.loads(clean_text)
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON 파싱 실패, 재시도: {e}")
-            logger.warning(f"실패 위치: line {e.lineno}, column {e.colno}, char {e.pos}")
-            # 한 번 더 시도: 중괄호만 추출
-            try:
-                start_idx = clean_text.find("{")
-                end_idx = clean_text.rfind("}") + 1
-                if start_idx >= 0 and end_idx > start_idx:
-                    # 중괄호 사이의 텍스트 추출
-                    json_text = clean_text[start_idx:end_idx]
-                    # 마지막 쉼표 제거 시도 (잘못된 JSON 형식 수정)
-                    json_text = json_text.rstrip().rstrip(',')
-                    # 닫는 중괄호 다시 추가
-                    if not json_text.endswith("}"):
-                        json_text += "}"
-                    result = json.loads(json_text)
-                    logger.info("✅ 중괄호 추출 후 JSON 파싱 성공")
-                else:
-                    raise ValueError("유효한 JSON을 찾을 수 없습니다.")
-            except Exception as e2:
-                logger.error(f"JSON 파싱 최종 실패: {e2}")
-                logger.error(f"원본 텍스트 (처음 500자): {clean_text[:500]}")
-                logger.error(f"원본 텍스트 (마지막 500자): {clean_text[-500:]}")
-                # JSON이 아니면 텍스트로 반환하되, 가능한 부분만 추출
-                try:
-                    # 최소한의 구조라도 추출 시도
-                    if "executive_summary" in clean_text:
-                        # 부분 파싱 시도
-                        import re
-                        exec_match = re.search(r'"executive_summary"\s*:\s*"([^"]+)"', clean_text)
-                        exec_summary = exec_match.group(1) if exec_match else f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다."
-                    else:
-                        exec_summary = f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다."
-                except:
-                    exec_summary = f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다."
-                
-                result = {
-                    "executive_summary": exec_summary,
-                    "key_findings": {
-                        "primary_insights": [
-                            "AI 응답 파싱에 실패했습니다.",
-                            "원본 응답을 확인하세요.",
-                            f"오류: {str(e2)[:200]}"
-                        ],
-                        "quantitative_metrics": {}
-                    },
-                    "detailed_analysis": {
-                        "insights": {
-                            "raw_response": result_text[:1000] if len(result_text) > 1000 else result_text  # 처음 1000자
-                        }
-                    },
-                    "strategic_recommendations": {
-                        "immediate_actions": [
-                            "서버 로그를 확인하여 AI 응답을 검토하세요.",
-                            "프롬프트를 조정하여 JSON 형식 응답을 강제하세요."
-                        ]
-                    },
-                    "target_keyword": target_keyword,
-                    "target_type": target_type,
-                    "error": "JSON 파싱 실패",
-                    "raw_response_length": len(result_text)
-                }
+            result = parse_json_with_fallback(result_text)
+            logger.info("✅ JSON 파싱 성공 (강화된 파서 사용)")
+        except ValueError as e:
+            logger.error(f"JSON 파싱 최종 실패: {e}")
+            logger.error(f"원본 텍스트 (처음 500자): {result_text[:500] if len(result_text) > 500 else result_text}")
+            logger.error(f"원본 텍스트 (마지막 500자): {result_text[-500:] if len(result_text) > 500 else result_text}")
+            
+            # 최소한의 구조라도 반환
+            result = {
+                "executive_summary": f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다. (JSON 파싱 실패로 기본 구조만 반환)",
+                "key_findings": {
+                    "primary_insights": [
+                        "AI 응답 파싱에 실패했습니다.",
+                        "원본 응답을 확인하세요.",
+                        f"오류: {str(e)[:200]}"
+                    ],
+                    "quantitative_metrics": {}
+                },
+                "detailed_analysis": {
+                    "insights": {
+                        "raw_response": result_text[:2000] if len(result_text) > 2000 else result_text
+                    }
+                },
+                "strategic_recommendations": {
+                    "immediate_actions": [
+                        "서버 로그를 확인하여 AI 응답을 검토하세요.",
+                        "프롬프트를 조정하여 JSON 형식 응답을 강제하세요."
+                    ]
+                },
+                "target_keyword": target_keyword,
+                "target_type": target_type,
+                "error": "JSON 파싱 실패",
+                "raw_response_length": len(result_text)
+            }
         
         # 결과에 메타데이터 추가 (없는 경우에만)
         if "target_keyword" not in result:
@@ -570,23 +555,26 @@ async def _analyze_with_openai(
         logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}, 길이: {len(api_key)} 문자")
         client = AsyncOpenAI(api_key=api_key)
         
-        # 프롬프트 생성 및 최적화
+        # 프롬프트 생성 및 최적화 (토큰 최적화 강화)
         if progress_tracker:
             await progress_tracker.update(20, "프롬프트 생성 중...")
-        additional_context_optimized = optimize_additional_context(additional_context, max_length=500)
+        
+        # 추가 컨텍스트 최적화 (더 짧게)
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
         
-        # 토큰 최적화 적용
+        # 토큰 최적화 적용 (더 공격적으로)
+        prompt = optimize_prompt(prompt, max_length=4000)  # 프롬프트 최대 4000자로 제한 (기존 8000에서 절반)
         prompt_tokens = estimate_tokens(prompt)
-        prompt = optimize_prompt(prompt, max_length=8000)  # 프롬프트 최대 8000자로 제한
         
-        # 시스템 메시지 생성 및 최적화
+        # 시스템 메시지 생성 및 최적화 (이미 간소화됨)
         system_message = _build_system_message(target_type)
-        system_message = optimize_prompt(system_message, max_length=500)
         
         # 토큰 수 계산 및 max_tokens 설정
         full_prompt_tokens = estimate_tokens(system_message) + prompt_tokens
         max_output_tokens = get_max_tokens_for_model(settings.OPENAI_MODEL, full_prompt_tokens)
+        
+        logger.info(f"토큰 최적화: 프롬프트 {prompt_tokens} 토큰, 시스템 {estimate_tokens(system_message)} 토큰, 총 {full_prompt_tokens} 토큰")
         
         if progress_tracker:
             await progress_tracker.update(30, "OpenAI API 요청 전송 중...")
@@ -606,8 +594,8 @@ async def _analyze_with_openai(
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
-                max_tokens=max_output_tokens,  # 최대 출력 토큰 설정
+                temperature=0.5,  # 0.7에서 0.5로 낮춰서 더 빠르고 일관된 응답
+                max_tokens=min(max_output_tokens, 4000),  # 최대 출력 토큰 제한 (4000으로 제한하여 속도 향상)
                 response_format={"type": "json_object"}  # JSON 응답 강제
             )
             logger.info("=" * 60)
@@ -633,25 +621,14 @@ async def _analyze_with_openai(
         if progress_tracker:
             await progress_tracker.update(80, "AI 응답 수신 완료, 결과 파싱 중...")
         
-        # JSON 형식으로 파싱 시도
+        # 강화된 JSON 파싱 사용
         try:
-            # result_text가 문자열인지 확인
             if isinstance(result_text, str):
-                # 마크다운 코드 블록 제거
-                clean_text = result_text.strip()
-                if clean_text.startswith("```json"):
-                    clean_text = clean_text[7:]  # ```json 제거
-                if clean_text.startswith("```"):
-                    clean_text = clean_text[3:]  # ``` 제거
-                if clean_text.endswith("```"):
-                    clean_text = clean_text[:-3]  # 끝의 ``` 제거
-                clean_text = clean_text.strip()
-                
-                result = json.loads(clean_text)
+                result = parse_json_with_fallback(result_text)
                 if progress_tracker:
                     await progress_tracker.update(90, "JSON 파싱 완료, 결과 정리 중...")
             else:
-                # 문자열 응답인 경우
+                # 문자열이 아닌 경우
                 result = {
                     "executive_summary": f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다.",
                     "key_findings": {
@@ -663,7 +640,7 @@ async def _analyze_with_openai(
                     },
                     "detailed_analysis": {
                         "insights": {
-                            "raw_response": str(result_text)[:500]  # 처음 500자만
+                            "raw_response": str(result_text)[:500]
                         }
                     },
                     "strategic_recommendations": {
@@ -675,47 +652,33 @@ async def _analyze_with_openai(
                     "target_keyword": target_keyword,
                     "target_type": target_type
                 }
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON 파싱 실패, 재시도: {e}")
-            # 한 번 더 시도: 중괄호만 추출
-            try:
-                if isinstance(result_text, str):
-                    clean_text = result_text.strip()
-                    start_idx = clean_text.find("{")
-                    end_idx = clean_text.rfind("}") + 1
-                    if start_idx >= 0 and end_idx > start_idx:
-                        result = json.loads(clean_text[start_idx:end_idx])
-                    else:
-                        raise ValueError("유효한 JSON을 찾을 수 없습니다.")
-                else:
-                    raise ValueError("응답이 문자열이 아닙니다.")
-            except Exception as e2:
-                logger.error(f"JSON 파싱 최종 실패: {e2}")
-                # JSON이 아니면 구조화된 오류 응답 반환
-                result = {
-                    "executive_summary": f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다.",
-                    "key_findings": {
-                        "primary_insights": [
-                            "AI 응답 파싱에 실패했습니다.",
-                            "원본 응답을 확인하세요."
-                        ],
-                        "quantitative_metrics": {}
-                    },
-                    "detailed_analysis": {
-                        "insights": {
-                            "raw_response": str(result_text)[:500] if isinstance(result_text, str) else str(result_text)
-                        }
-                    },
-                    "strategic_recommendations": {
-                        "immediate_actions": [
-                            "서버 로그를 확인하여 AI 응답을 검토하세요.",
-                            "프롬프트를 조정하여 JSON 형식 응답을 강제하세요."
-                        ]
-                    },
-                    "target_keyword": target_keyword,
-                    "target_type": target_type,
-                    "error": "JSON 파싱 실패"
-                }
+        except ValueError as e:
+            logger.error(f"JSON 파싱 최종 실패: {e}")
+            # 구조화된 오류 응답 반환
+            result = {
+                "executive_summary": f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다.",
+                "key_findings": {
+                    "primary_insights": [
+                        "AI 응답 파싱에 실패했습니다.",
+                        "원본 응답을 확인하세요."
+                    ],
+                    "quantitative_metrics": {}
+                },
+                "detailed_analysis": {
+                    "insights": {
+                        "raw_response": str(result_text)[:2000] if isinstance(result_text, str) else str(result_text)
+                    }
+                },
+                "strategic_recommendations": {
+                    "immediate_actions": [
+                        "서버 로그를 확인하여 AI 응답을 검토하세요.",
+                        "프롬프트를 조정하여 JSON 형식 응답을 강제하세요."
+                    ]
+                },
+                "target_keyword": target_keyword,
+                "target_type": target_type,
+                "error": "JSON 파싱 실패"
+            }
         
         # 결과에 메타데이터 추가 (없는 경우에만)
         if "target_keyword" not in result:
@@ -974,45 +937,15 @@ def _merge_analysis_results(openai_result: Dict[str, Any], gemini_result: Dict[s
 
 
 def _build_system_message(target_type: str) -> str:
-    """시스템 메시지 생성"""
-    mece_instruction = """
-CRITICAL: Your analysis MUST follow MECE (Mutually Exclusive, Collectively Exhaustive) principles:
-- Mutually Exclusive: Each section and category must be distinct with no overlap
-- Collectively Exhaustive: All relevant aspects must be covered comprehensively
-- Logical Structure: Follow a clear, hierarchical, and logical flow
-- Professional Format: Present findings in a structured, consulting-grade document format
-"""
+    """시스템 메시지 생성 (토큰 최적화)"""
+    base_instruction = "Respond ONLY in valid JSON. Follow MECE principles. Be data-driven and actionable."
     
     if target_type == "audience":
-        return f"""You are a senior marketing research and consulting analyst with 15+ years of experience at top-tier consulting firms (McKinsey, BCG, Bain, Deloitte, PwC).
-Your role is to provide comprehensive, structured, and actionable audience analysis reports for C-level executives and marketing decision-makers.
-{mece_instruction}
-You MUST respond ONLY in valid JSON format without any markdown code blocks or additional text.
-Your analysis must be:
-- Data-driven with specific quantitative metrics and qualitative insights
-- Structured in a logical, hierarchical manner following MECE principles
-- Professional consulting-grade quality suitable for board presentations
-- Actionable with clear strategic recommendations"""
+        return f"Senior digital marketer and online customer behavior consultant with 15+ years experience. {base_instruction} Provide comprehensive audience analysis report in consulting firm quality with MECE structure."
     elif target_type == "keyword":
-        return f"""You are a senior SEO and digital marketing strategy consultant with 15+ years of experience at top-tier consulting firms.
-Your role is to provide comprehensive, structured, and actionable keyword analysis reports for digital marketing executives.
-{mece_instruction}
-You MUST respond ONLY in valid JSON format without any markdown code blocks or additional text.
-Your analysis must be:
-- Data-driven with specific quantitative metrics and qualitative insights
-- Structured in a logical, hierarchical manner following MECE principles
-- Professional consulting-grade quality suitable for strategic planning
-- Actionable with clear SEO and marketing recommendations"""
-    else:  # competitor
-        return f"""You are a senior competitive intelligence and market research consultant with 15+ years of experience at top-tier consulting firms.
-Your role is to provide comprehensive, structured, and actionable competitive analysis reports for strategic planning executives.
-{mece_instruction}
-You MUST respond ONLY in valid JSON format without any markdown code blocks or additional text.
-Your analysis must be:
-- Data-driven with specific quantitative metrics and qualitative insights
-- Structured in a logical, hierarchical manner following MECE principles
-- Professional consulting-grade quality suitable for board-level decisions
-- Actionable with clear strategic recommendations and competitive positioning"""
+        return f"Senior digital marketer and online customer behavior consultant with 15+ years experience. {base_instruction} Provide comprehensive keyword analysis report in consulting firm quality with MECE structure."
+    else:  # comprehensive
+        return f"Senior strategic marketing consultant. {base_instruction} Provide comprehensive analysis combining keyword and audience insights for strategic recommendations."
 
 
 def _build_analysis_prompt(
@@ -1024,336 +957,1074 @@ def _build_analysis_prompt(
 ) -> str:
     """분석 프롬프트 생성"""
     
-    # 기간 정보 추가
+    # 기간 정보 추가 (토큰 최적화)
     period_info = ""
     period_instruction = ""
     if start_date and end_date:
-        period_info = f"""
-**분석 기간**: {start_date} ~ {end_date}
-"""
-        period_instruction = f"""
-**중요**: 반드시 {start_date}부터 {end_date}까지의 기간 동안의 데이터, 트렌드, 변화, 패턴을 중심으로 분석해주세요. 
-이 기간 동안의 시계열 변화, 계절성, 이벤트, 뉴스, 시장 동향 등을 반드시 포함하여 매우 상세하게 분석해야 합니다.
-"""
+        period_info = f"Period: {start_date} ~ {end_date}"
+        period_instruction = f"Analyze trends, changes, and patterns during {start_date} to {end_date}. Include time-series changes, seasonality, events, and market trends."
     elif start_date:
-        period_info = f"""
-**시작일**: {start_date}
-"""
-        period_instruction = f"""
-**중요**: 반드시 {start_date} 이후의 트렌드와 변화를 중심으로 분석해주세요. 
-이 날짜 이후의 시계열 변화, 뉴스, 시장 동향 등을 반드시 포함하여 매우 상세하게 분석해야 합니다.
-"""
+        period_info = f"Start: {start_date}"
+        period_instruction = f"Analyze trends and changes after {start_date}. Include time-series changes and market trends."
     elif end_date:
-        period_info = f"""
-**종료일**: {end_date}
-"""
-        period_instruction = f"""
-**중요**: 반드시 {end_date}까지의 데이터를 기반으로 분석해주세요. 
-이 날짜까지의 시계열 변화, 뉴스, 시장 동향 등을 반드시 포함하여 매우 상세하게 분석해야 합니다.
-"""
+        period_info = f"End: {end_date}"
+        period_instruction = f"Analyze data up to {end_date}. Include time-series changes and market trends."
     
-    # 오디언스 분석에 특화된 프롬프트
+    # 오디언스 분석에 특화된 프롬프트 (상세 컨설팅 보고서 형식)
     if target_type == "audience":
-        prompt = f"""
-당신은 10년 이상의 경력을 가진 전문 마케팅 및 소비자 행동 분석가입니다. 
-다음 타겟 오디언스에 대한 매우 상세하고 심층적인 마케팅 관점의 분석을 수행해주세요.
+        period_display = ""
+        if start_date and end_date:
+            period_display = f"{start_date}–{end_date}"
+        elif start_date:
+            period_display = f"{start_date}~"
+        elif end_date:
+            period_display = f"~{end_date}"
+        
+        prompt = f"""# [오디언스 분석 보고서] {target_keyword} | 기간: {period_display} | 분석 유형: #2 오디언스 분석(타겟/페르소나)
 
-**분석 대상**: {target_keyword}
-{period_info}
-{period_instruction}
+당신은 "디지털 마케터 및 온라인 고객 행동, 마케팅 컨설턴트 업무를 15년 이상 수행한 시니어 마케터"입니다.
+아래 입력값을 바탕으로, 해당 기간의 주요 데이터(뉴스/웹/커뮤니티/리뷰/소셜/검색 의도 등)를 '크롤링하여 확보한 것처럼' 폭넓게 리서치하고, 컨설팅 업체 보고서 수준으로 MECE 구조로 오디언스 분석 결과를 작성하세요.
 
-**분석 목적**: 이 분석은 마케팅 전략 수립, 타겟팅, 메시징, 채널 선택, 예산 배분 등의 의사결정에 활용됩니다.
-따라서 모든 분석은 실행 가능한 마케팅 인사이트와 구체적인 전략 제안을 포함해야 합니다.
+단, 실제 크롤링/접속이 불가할 수 있으므로:
+- 가능한 경우: 최신·관련성 높은 공개 자료를 근거로 분석을 구성하고,
+- 불가한 경우: "추정/가정"과 "검증 필요"를 명확히 표기하되, 보고서 품질(논리·구조·실행안)은 유지하세요.
+- 모든 주장에는 근거(출처) 또는 산출 방법을 붙이세요.
+
+[입력값]
+- 분석 키워드: {target_keyword}
+- 분석 기간: {period_display}
+- 언어/시장: KR, Korea
 """
         if additional_context:
-            prompt += f"""
-**추가 컨텍스트**:
-{additional_context}
-
-"""
+            prompt += f"- 추가 컨텍스트: {additional_context}\n"
+        
         prompt += """
-다음 항목들을 매우 상세하게 분석하여 JSON 형식으로 응답해주세요. 각 항목은 구체적이고 실용적인 정보를 포함해야 합니다. 
-특히 지정된 기간 동안의 변화, 트렌드, 패턴을 반드시 포함하여 분석해주세요:
+[리서치·데이터 수집 지침(오디언스 관점)]
+1) "누가(Who) / 왜(Why) / 어디서(Where) / 어떻게(How)" 프레임으로 데이터를 분류.
+2) 커뮤니티/리뷰/댓글/질문글에서 "불만·욕구·장벽·표현(voice of customer)"을 추출.
+3) 검색 의도(문제 인식→비교→결정)의 여정 단계별 질문을 도출.
+4) 기간 내 사회/정책/기술 변화가 타겟 행동에 미친 영향을 식별.
+
+[분석 범위(반드시 포함)]
+A. 타겟 세그먼테이션(고객 분류)
+- 세그먼트 기준: (1) 니즈/문제 (2) 구매 동기 (3) 사용 맥락 (4) 예산/민감도 (5) 채널 선호
+- 세그먼트별 크기 추정(정성/정량 가능 범위), 성장성, 우선순위
+
+B. 고객 여정 & 의사결정 구조
+- Awareness/Consideration/Conversion/Retention 단계별:
+  - 핵심 질문(FAQ)
+  - 정보 소스(뉴스/유튜브/리뷰/지인/커뮤니티 등)
+  - 전환 장벽(리스크·불신·가격·시간·복잡성)
+  - 설득 레버(증거·사례·보증·사회적 증거)
+
+C. 페르소나 3~5개(필수)
+각 페르소나는 아래 템플릿으로 고정 출력:
+- 페르소나 명: 
+- 한 줄 요약:
+- 배경(직업/라이프스타일/디지털 리터러시):
+- 목표/성공 기준:
+- Pain Points(상위 3~5개):
+- Trigger(행동 촉발 요인):
+- Objection(반대/우려):
+- 사용 채널 & 콘텐츠 소비 습관:
+- 선호 메시지 톤:
+- 전환에 필요한 증거(Proof):
+- 추천 콘텐츠/오퍼:
+- 금지 메시지(브랜드 세이프티 관점):
+
+D. 채널·콘텐츠 전략(페르소나 매핑)
+- 페르소나 × 채널 매트릭스(어떤 채널에서 어떤 메시지/포맷이 유효한가)
+- 콘텐츠 기획: 토픽 클러스터(문제/해결/비교/사례/FAQ) + 포맷(숏폼/롱폼/리포트/툴)
+- 운영 방향: 에디토리얼 캘린더(주간/월간), 리퍼포징(원본→파생), 커뮤니티 운영(가이드/모더레이션)
+
+E. 마케팅 거버넌스(전략 운영 체계)
+- 콘텐츠 승인/법무·브랜드 검수 프로세스
+- 데이터·측정 거버넌스: KPI 정의, 이벤트 설계, 리포팅 주기
+- 리스크 대응: 이슈 발생 시 커뮤니케이션 룰, FAQ/템플릿, escalation 체계
+
+[보고서 출력 포맷(반드시 준수: MECE/프로페셔널)]
+1. Executive Summary (핵심 결론 5~10문장)
+2. 분석 개요
+   2.1 목적/범위
+   2.2 기간/시장/소스
+   2.3 방법론 + 한계/가정
+3. Key Insights (핵심 인사이트 5~7개: 근거→해석→시사점)
+4. 오디언스 상세 분석
+   4.1 세그먼테이션
+   4.2 고객 여정 & 의사결정
+   4.3 페르소나(3~5개)
+5. 전략 제안
+   5.1 페르소나 기반 채널 운영 전략
+   5.2 콘텐츠 기획/제작/운영 전략
+   5.3 KPI/측정 프레임워크
+6. 실행 로드맵
+   - 30/60/90일 계획(우선순위, 산출물, R&R)
+7. 리스크 & 거버넌스
+   - 브랜드 세이프티, FAQ 템플릿, 운영 규정
+8. 부록
+   8.1 메시지 뱅크(페르소나별 훅/헤드라인/CTA)
+   8.2 참고문헌(레퍼런스) — 논문 참고문헌 스타일로 출력
+
+[참고문헌(레퍼런스) 출력 규칙]
+- 최소 8개 이상
+- 형식 예시:
+  [1] Publisher/Org. (Year, Month Day). Title. Source/Website.
+  [2] Author. (Year). Title. Journal/Report. Publisher.
+- 링크는 가능한 경우 포함하되, 문장 흐름을 깨지 않게 부록에만 정리.
+
+[품질 규칙]
+- MECE 유지(세그먼트/페르소나 중복 최소화)
+- 추정은 추정으로 표시(검증 체크리스트 포함)
+- 실행안 중심(채널/콘텐츠/운영/거버넌스까지 연결)
+- 문서에 그대로 붙여넣기 좋은 서식(번호/계층/불릿) 유지
+
+이제 위 포맷으로 보고서를 JSON 형식으로 작성하세요. 반드시 유효한 JSON 형식으로만 응답하세요.
 
 {
-  "executive_summary": "Executive Summary: 오디언스에 대한 종합적인 요약 (3-5문단, 핵심 발견사항, 주요 인사이트, 전략적 권장사항 요약)",
-  "key_findings": {
-    "primary_insights": [
-      "인구통계학적 특성의 핵심 요약 (연령대, 성별, 지역, 소득 수준 등)",
-      "심리적 특성 및 라이프스타일의 주요 특징",
-      "주요 행동 패턴 및 미디어 소비 습관의 특징",
-      "핵심 니즈 및 페인 포인트 (3-5개 구체적 사례)",
-      "이 오디언스의 고유한 특성과 차별점"
-    ],
-    "quantitative_metrics": {
-      "estimated_volume": "예상 오디언스 규모 (구체적 숫자 또는 범위)",
-      "engagement_level": "참여 수준 (낮음/중간/높음) 및 근거",
-      "growth_potential": "성장 잠재력 (낮음/중간/높음) 및 근거",
-      "market_value": "시장 가치 추정 (구매력, 소비 규모 등)",
-      "accessibility": "접근 난이도 (이 오디언스에 도달하기 어려운 정도)"
+  "executive_summary": "핵심 결론 5-10문장 (주요 발견사항, 인사이트, 전략적 권장사항)",
+  "analysis_overview": {
+    "purpose_scope": "분석 목적 및 범위",
+    "period_market_sources": "기간/시장/데이터 소스",
+    "methodology": {
+      "research_approach": "방법론",
+      "limitations_assumptions": "한계 및 가정 사항"
     }
   },
-  "detailed_analysis": {
-    "demographics": {
-      "age_range": "주요 연령대 (예: 25-35세) 및 각 연령대별 특성",
-      "gender": "성별 분포 (예: 남성 60%, 여성 40%) 및 성별별 특성",
-      "location": "주요 지역 (도시/지역별 분포 및 특성)",
-      "income_level": "소득 수준 (구체적 금액 범위 및 소비 패턴)",
-      "education_level": "교육 수준 및 직업군 분포",
-      "family_status": "가족 구성 (1인 가구, 기혼, 자녀 유무 등)",
-      "expected_occupations": ["예상 직업 1 (상세 설명 포함)", "예상 직업 2", "예상 직업 3", "예상 직업 4", "예상 직업 5"]
+  "key_insights": [
+    {
+      "insight": "핵심 인사이트 1",
+      "evidence": "근거",
+      "interpretation": "해석",
+      "implication": "시사점"
+    }
+  ],
+  "detailed_audience_analysis": {
+    "segmentation": {
+      "segmentation_criteria": {
+        "needs_problems": "니즈/문제 기준",
+        "purchase_motivation": "구매 동기 기준",
+        "usage_context": "사용 맥락 기준",
+        "budget_sensitivity": "예산/민감도 기준",
+        "channel_preference": "채널 선호 기준"
+      },
+      "segments": [
+        {
+          "segment_name": "세그먼트명",
+          "size_estimate": "크기 추정 (정성/정량)",
+          "growth_potential": "성장성",
+          "priority": "우선순위"
+        }
+      ]
     },
-    "psychographics": {
-      "lifestyle": "라이프스타일 특성 (일상 패턴, 여가 활동, 생활 방식 등 상세 설명)",
-      "values": "가치관 및 신념 (중요하게 생각하는 가치 5-7개)",
-      "interests": "주요 관심 분야 (구체적인 관심사 및 취미)",
-      "personality_traits": "성격 특성 (MBTI 유형 추정, 주요 성격 특성)",
-      "aspirations": "열망 및 목표 (이 오디언스가 추구하는 것)",
-      "fears_concerns": "우려사항 및 두려움 (이 오디언스가 걱정하는 것)"
+    "customer_journey_decision": {
+      "awareness": {
+        "key_questions": ["Awareness 단계 핵심 질문 (FAQ)"],
+        "information_sources": ["정보 소스 (뉴스/유튜브/리뷰/지인/커뮤니티 등)"],
+        "conversion_barriers": ["전환 장벽 (리스크·불신·가격·시간·복잡성)"],
+        "persuasion_levers": ["설득 레버 (증거·사례·보증·사회적 증거)"]
+      },
+      "consideration": {
+        "key_questions": ["Consideration 단계 핵심 질문"],
+        "information_sources": ["정보 소스"],
+        "conversion_barriers": ["전환 장벽"],
+        "persuasion_levers": ["설득 레버"]
+      },
+      "conversion": {
+        "key_questions": ["Conversion 단계 핵심 질문"],
+        "information_sources": ["정보 소스"],
+        "conversion_barriers": ["전환 장벽"],
+        "persuasion_levers": ["설득 레버"]
+      },
+      "retention": {
+        "key_questions": ["Retention 단계 핵심 질문"],
+        "information_sources": ["정보 소스"],
+        "conversion_barriers": ["전환 장벽"],
+        "persuasion_levers": ["설득 레버"]
+      }
     },
-    "behavior": {
-      "purchase_behavior": "구매 행동 패턴 (구매 주기, 구매 채널, 구매 결정 요인, 가격 민감도 등 상세 설명)",
-      "media_consumption": "미디어 소비 패턴 (선호하는 미디어, 소비 시간, 콘텐츠 선호도 등)",
-      "online_activity": "온라인 활동 특성 (주로 사용하는 플랫폼, 온라인 쇼핑 패턴, SNS 사용 등)",
-      "brand_loyalty": "브랜드 충성도 (브랜드 선호도, 전환 가능성 등)",
-      "decision_making": "의사결정 프로세스 (구매 결정에 영향을 미치는 요소, 결정 시간 등)"
-    },
-    "trends": ["지정된 기간 동안의 트렌드 1 (상세 설명 및 시계열 변화 포함)", "트렌드 2", "트렌드 3", "트렌드 4", "트렌드 5"],
-    "opportunities": ["마케팅 기회 1 (구체적 전략 포함)", "마케팅 기회 2", "마케팅 기회 3", "마케팅 기회 4", "마케팅 기회 5"],
-    "challenges": ["마케팅 도전 과제 1 (해결 방안 포함)", "마케팅 도전 과제 2", "마케팅 도전 과제 3", "마케팅 도전 과제 4"]
+    "personas": [
+      {
+        "persona_name": "페르소나 명",
+        "one_line_summary": "한 줄 요약",
+        "background": {
+          "occupation": "직업",
+          "lifestyle": "라이프스타일",
+          "digital_literacy": "디지털 리터러시"
+        },
+        "goals_success_criteria": "목표/성공 기준",
+        "pain_points": ["Pain Point 1", "Pain Point 2", "Pain Point 3", "Pain Point 4", "Pain Point 5"],
+        "trigger": "행동 촉발 요인",
+        "objection": "반대/우려",
+        "channels_content_habits": "사용 채널 & 콘텐츠 소비 습관",
+        "preferred_message_tone": "선호 메시지 톤",
+        "conversion_proof_needed": "전환에 필요한 증거(Proof)",
+        "recommended_content_offer": "추천 콘텐츠/오퍼",
+        "prohibited_messages": "금지 메시지(브랜드 세이프티 관점)"
+      }
+    ]
   },
   "strategic_recommendations": {
-    "immediate_actions": [
-      "즉시 실행 가능한 마케팅 전략 1 (구체적 실행 방안, 예상 효과, 필요 리소스 포함)",
-      "즉시 실행 가능한 마케팅 전략 2",
-      "즉시 실행 가능한 마케팅 전략 3"
+    "persona_based_channel_strategy": {
+      "persona_channel_matrix": [
+        {
+          "persona_name": "페르소나명",
+          "channels": [
+            {
+              "channel": "채널명",
+              "message": "메시지",
+              "format": "포맷",
+              "effectiveness": "유효성"
+            }
+          ]
+        }
+      ]
+    },
+    "content_strategy": {
+      "topic_clusters": {
+        "problem": ["문제 관련 토픽"],
+        "solution": ["해결 관련 토픽"],
+        "comparison": ["비교 관련 토픽"],
+        "case_study": ["사례 관련 토픽"],
+        "faq": ["FAQ 관련 토픽"]
+      },
+      "content_formats": {
+        "short_form": "숏폼 전략",
+        "long_form": "롱폼 전략",
+        "report": "리포트 전략",
+        "tool": "툴 전략"
+      },
+      "operational_direction": {
+        "editorial_calendar": "에디토리얼 캘린더 (주간/월간)",
+        "repurposing": "리퍼포징 전략 (원본→파생)",
+        "community_management": "커뮤니티 운영 (가이드/모더레이션)"
+      }
+    },
+    "kpi_measurement_framework": {
+      "kpi_definitions": ["KPI 정의"],
+      "event_design": "이벤트 설계",
+      "reporting_cycle": "리포팅 주기"
+    }
+  },
+  "execution_roadmap": {
+    "day_30": {
+      "priorities": ["30일 우선순위"],
+      "deliverables": ["산출물"],
+      "roles_responsibilities": "담당 역할 R&R"
+    },
+    "day_60": {
+      "priorities": ["60일 우선순위"],
+      "deliverables": ["산출물"],
+      "roles_responsibilities": "담당 역할 R&R"
+    },
+    "day_90": {
+      "priorities": ["90일 우선순위"],
+      "deliverables": ["산출물"],
+      "roles_responsibilities": "담당 역할 R&R"
+    }
+  },
+  "risk_governance": {
+    "brand_safety": {
+      "content_approval_process": "콘텐츠 승인/법무·브랜드 검수 프로세스",
+      "risk_response_rules": "리스크 대응 룰",
+      "escalation_system": "escalation 체계"
+    },
+    "faq_templates": ["FAQ 템플릿"],
+    "operational_regulations": "운영 규정"
+  },
+  "appendix": {
+    "message_bank": [
+      {
+        "persona_name": "페르소나명",
+        "hooks": ["훅 메시지"],
+        "headlines": ["헤드라인"],
+        "ctas": ["CTA"]
+      }
     ],
-    "short_term_strategies": [
-      "단기 마케팅 전략 1 (3-6개월, 구체적 실행 방안 포함)",
-      "단기 마케팅 전략 2",
-      "단기 마케팅 전략 3"
-    ],
-    "long_term_strategies": [
-      "장기 마케팅 전략 1 (6개월 이상, 구체적 실행 방안 포함)",
-      "장기 마케팅 전략 2",
-      "장기 마케팅 전략 3"
-    ],
-    "success_metrics": "성공 지표 및 측정 방법 (KPI, 측정 주기, 목표 수치 등)"
+    "references": [
+      {
+        "id": 1,
+        "citation": "Publisher/Org. (Year, Month Day). Title. Source/Website.",
+        "url": "링크 (가능한 경우)"
+      }
+    ]
   }
 }
 """
     elif target_type == "keyword":
-        # 키워드 분석에 특화된 매우 상세한 프롬프트
-        prompt = f"""
-당신은 글로벌 컨설팅 그룹의 시니어 SEO 및 디지털 마케팅 전략 컨설턴트입니다.
-다음 키워드에 대한 MECE 원칙에 기반한 구조화된 컨설팅 수준의 분석 보고서를 작성해주세요.
+        # 키워드 분석 프롬프트 (상세 컨설팅 보고서 형식)
+        period_display = ""
+        if start_date and end_date:
+            period_display = f"{start_date}–{end_date}"
+        elif start_date:
+            period_display = f"{start_date}~"
+        elif end_date:
+            period_display = f"~{end_date}"
+        
+        prompt = f"""# [키워드 분석 보고서] {target_keyword} | 기간: {period_display} | 분석 유형: #1 키워드 분석
 
-**분석 대상 키워드**: {target_keyword}
-{period_info}
-{period_instruction}
+당신은 "디지털 마케터 및 온라인 고객 행동, 마케팅 컨설턴트 업무를 15년 이상 수행한 시니어 마케터"입니다. 
+아래 입력값을 바탕으로, 해당 기간의 주요 데이터(뉴스/웹/커뮤니티/검색 트렌드 등)를 '크롤링하여 확보한 것처럼' 폭넓게 리서치하고, 컨설팅 업체 보고서 수준으로 MECE 구조로 분석 결과를 작성하세요.
 
-**분석 목적**: 이 분석은 디지털 마케팅 전략 수립, SEO 최적화, 콘텐츠 기획, 키워드 타겟팅, 경쟁 분석 등의 의사결정에 활용됩니다.
-따라서 모든 분석은 실행 가능한 SEO 인사이트와 구체적인 최적화 전략을 포함해야 합니다.
+단, 실제 크롤링/접속이 불가할 수 있으므로:
+- 가능한 경우: 최신·관련성 높은 공개 자료를 근거로 분석을 구성하고,
+- 불가한 경우: "추정/가정"과 "검증 필요"를 명확히 표기하되, 보고서 품질(논리·구조·실행안)은 유지하세요.
+- 모든 수치/주장에는 근거(출처) 또는 산출 방법을 붙이세요.
 
-**MECE 구조 요구사항**:
-1. Mutually Exclusive (상호 배타적): 각 섹션과 카테고리는 명확히 구분되어 중복이 없어야 합니다.
-2. Collectively Exhaustive (완전 포괄적): 키워드 분석에 필요한 모든 측면을 포괄해야 합니다.
-3. 논리적 계층 구조: Executive Summary → Key Findings → Detailed Analysis → Strategic Recommendations 순서로 구성
-4. 컨설팅 문서 형식: 명확한 구조, 데이터 기반 결론, 실행 가능한 권장사항
+[입력값]
+- 분석 키워드: {target_keyword}
+- 분석 기간: {period_display}
+- 언어/시장: KR, Korea
 """
         if additional_context:
-            prompt += f"""
-**추가 컨텍스트**:
-{additional_context}
-
-"""
+            prompt += f"- 추가 컨텍스트: {additional_context}\n"
+        
         prompt += """
-**중요 지시사항**:
-1. 반드시 유효한 JSON 형식으로만 응답해야 합니다. 마크다운 코드 블록(```json)을 사용하지 마세요.
-2. MECE 원칙을 엄격히 준수하여 각 섹션이 상호 배타적이면서 완전 포괄적이어야 합니다.
-3. 정량적 데이터(검색량, 경쟁도 점수, 예상 수치, 시장 규모 등)와 정성적 분석(전략, 기회 등)을 모두 포함해야 합니다.
-4. 지정된 기간 동안의 검색량 변화, 트렌드, 계절성, 이벤트 등을 반드시 포함하여 분석해주세요.
-5. 컨설팅 수준의 전문성: 논리적 근거, 데이터 기반 결론, 실행 가능한 SEO 전략을 제시해야 합니다.
-6. 문서 구조: Executive Summary → Key Findings → Detailed Analysis (MECE 구조) → Strategic Recommendations
+[리서치·데이터 수집 지침(보고서 내 반영)]
+1) 데이터 소스 범주를 분리해 수집 관점 정리(뉴스/공식 문서/트렌드 도구/커뮤니티/블로그/리뷰/동영상/소셜).
+2) 기간 내 이슈/사건/제품출시/정책 변화 등 "스파이크 요인"을 식별.
+3) 키워드 의미(정의/의도/동음이의/브랜드 vs 일반명사)를 먼저 정리 후 분석.
+4) 가능한 경우, 지역/언어에 따른 SERP 차이와 플랫폼별 추천/노출 맥락을 반영.
 
-다음 JSON 구조를 정확히 따르면서 각 필드를 매우 상세하게 작성해주세요. 각 섹션은 MECE 원칙에 따라 명확히 구분되어야 합니다:
+[분석 범위(반드시 포함)]
+A. 키워드 트렌드 분석
+- 기간 내 관심도 변화(상승/하락/급등 구간) 요약
+- 급등 원인 Top 3 가설 + 검증 포인트
+- 시즌성/이벤트성/뉴스성 분리
+
+B. 연관 키워드/토픽 클러스터
+- (1) 동의어/유사어 (2) 문제-해결형 (3) 비교/대안형 (4) 구매/전환형 (5) 브랜드/제품형
+- 클러스터별 검색 의도(Informational/Commercial/Transactional/Navigational)
+- 각 클러스터별 "추천 콘텐츠 포맷" (가이드/리스트/케이스/FAQ/툴/체크리스트)
+
+C. 감성 분석(긍정/부정/중립)
+- 데이터 근거(뉴스 헤드라인/커뮤니티 반응/리뷰/댓글 등) 기반으로 감성 분포 추정
+- 긍정·부정의 주요 원인 키워드(Drivers) 및 대표 문장(요약 재구성)
+- 리스크(부정 이슈) 조기 경보 키워드 세트 제안
+
+D. 경쟁/대체 키워드 & 차별화 포인트
+- 경쟁 주체(브랜드/카테고리/솔루션) 후보군 도출
+- 비교 구도(가격/성능/신뢰/편의/지원)에서 우리 포지셔닝 방향 제시
+
+E. 실행 시사점(디지털 마케팅 관점)
+- 채널 운영: 어떤 채널에서 어떤 키워드 클러스터를 다뤄야 하는지(우선순위)
+- 콘텐츠 기획/제작: 제목/후킹/구조(목차)/FAQ/AEO(답변형)/GEO(지역 맥락) 반영
+- 운영 방향: 에디토리얼 캘린더 가이드(주간/월간), 실험 설계(A/B), 리퍼포징 전략
+- 마케팅 거버넌스: 승인/검수 프로세스, 브랜드 세이프티, 리스크 대응 룰(가이드라인)
+
+[보고서 출력 포맷(반드시 준수: MECE/프로페셔널)]
+1. Executive Summary (5~10문장)
+2. 분석 개요
+   2.1 목적/범위
+   2.2 기간/시장/소스
+   2.3 방법론(크롤링/리서치/분석 로직) + 한계/가정
+3. Key Findings (핵심 발견 5~7개, 각 발견마다 "근거→해석→의미")
+4. 상세 분석
+   4.1 트렌드
+   4.2 연관 키워드/클러스터
+   4.3 감성 분석
+   4.4 경쟁/대체 키워드
+5. 전략적 시사점
+   5.1 채널 운영 제안
+   5.2 콘텐츠 전략(TOFU/MOFU/BOFU 매핑)
+   5.3 KPI/측정(정의/대시보드 항목/주기)
+6. 실행 로드맵
+   - 30/60/90일 계획(우선순위, 산출물, 담당 역할 R&R)
+7. 리스크 & 대응
+   - 부정 이슈 시나리오, Q&A, 브랜드 세이프티 체크리스트
+8. 부록
+   8.1 키워드 리스트(클러스터별)
+   8.2 참고문헌(레퍼런스) — 논문 참고문헌 스타일로 출력
+
+[참고문헌(레퍼런스) 출력 규칙]
+- 최소 8개 이상
+- 형식 예시:
+  [1] Publisher/Org. (Year, Month Day). Title. Source/Website.
+  [2] Author. (Year). Title. Journal/Report. Publisher.
+- 링크는 가능한 경우 포함하되, 문장 흐름을 깨지 않게 부록에만 정리.
+
+[품질 규칙]
+- 과장 금지: 추정은 추정이라고 표시
+- 중복 금지: 항목 간 MECE 유지
+- 실행 중심: "그래서 무엇을 할 것인가"가 각 섹션에 포함
+- 문서에 그대로 붙여넣기 좋은 서식(번호/계층/불릿) 유지
+
+이제 위 포맷으로 보고서를 JSON 형식으로 작성하세요. 반드시 유효한 JSON 형식으로만 응답하세요.
 
 {
-  "executive_summary": "Executive Summary: 키워드에 대한 종합적인 요약 (3-5문단, 핵심 발견사항, 주요 인사이트, 전략적 권장사항 요약)",
-  "key_findings": {
-    "primary_insights": [
-      "검색 의도 및 사용자 목적의 핵심 요약",
-      "경쟁 환경 및 시장 상황의 주요 특징",
-      "검색 트렌드 및 시계열 변화 패턴",
-      "관련 키워드 및 롱테일 키워드 기회",
-      "이 키워드의 고유한 특성과 차별점"
-    ],
-    "quantitative_metrics": {
-      "estimated_volume": "예상 검색량 (월간 검색량 범위 또는 추정치)",
-      "competition_level": "경쟁 수준 (낮음/중간/높음) 및 구체적 근거",
-      "growth_potential": "성장 잠재력 (낮음/중간/높음) 및 근거",
-      "difficulty_score": "난이도 점수 (1-100) 및 근거",
-      "opportunity_score": "기회 점수 (1-100) 및 근거"
+  "executive_summary": "5-10문장 요약 (핵심 발견사항, 주요 인사이트, 전략적 권장사항)",
+  "analysis_overview": {
+    "purpose_scope": "분석 목적 및 범위",
+    "period_market_sources": "기간/시장/데이터 소스",
+    "methodology": {
+      "research_logic": "크롤링/리서치/분석 로직",
+      "limitations_assumptions": "한계 및 가정 사항"
     }
   },
+  "key_findings": [
+    {
+      "finding": "핵심 발견 1",
+      "evidence": "근거",
+      "interpretation": "해석",
+      "implication": "의미"
+    },
+    {
+      "finding": "핵심 발견 2",
+      "evidence": "근거",
+      "interpretation": "해석",
+      "implication": "의미"
+    }
+  ],
   "detailed_analysis": {
-  "insights": {
-    "search_intent": {
-      "primary_intent": "주요 검색 의도 (Informational/Navigational/Transactional/Commercial) 및 근거",
-      "intent_breakdown": "의도별 분포 (예: 정보성 60%, 거래성 30%, 탐색성 10%)",
-      "user_journey_stage": "사용자 여정 단계 (인지/고려/구매/유지) 및 각 단계별 특성",
-      "search_context": "검색 맥락 (언제, 왜, 어떻게 검색하는지)"
+    "trend_analysis": {
+      "interest_change_summary": "기간 내 관심도 변화 요약 (상승/하락/급등 구간)",
+      "spike_causes": [
+        {
+          "rank": 1,
+          "hypothesis": "급등 원인 가설",
+          "verification_points": "검증 포인트"
+        }
+      ],
+      "seasonality_event_news": "시즌성/이벤트성/뉴스성 분리 분석"
     },
-    "competition": {
-      "competition_level": "경쟁 수준 (낮음/중간/높음) 및 구체적 근거",
-      "top_competitors": ["주요 경쟁 페이지/사이트 1", "주요 경쟁 페이지/사이트 2", "주요 경쟁 페이지/사이트 3", "주요 경쟁 페이지/사이트 4", "주요 경쟁 페이지/사이트 5"],
-      "competitor_analysis": "경쟁자들의 강점과 약점 분석",
-      "market_gap": "시장 공백 및 차별화 기회"
+    "related_keywords_clusters": {
+      "synonyms_similar": ["동의어/유사어 키워드 리스트"],
+      "problem_solution": ["문제-해결형 키워드 리스트"],
+      "comparison_alternative": ["비교/대안형 키워드 리스트"],
+      "purchase_conversion": ["구매/전환형 키워드 리스트"],
+      "brand_product": ["브랜드/제품형 키워드 리스트"],
+      "cluster_intent_mapping": {
+        "informational": ["정보성 키워드"],
+        "commercial": ["상업성 키워드"],
+        "transactional": ["거래성 키워드"],
+        "navigational": ["탐색성 키워드"]
+      },
+      "recommended_content_formats": {
+        "guide": "가이드 형식 추천 키워드",
+        "list": "리스트 형식 추천 키워드",
+        "case_study": "케이스 스터디 형식 추천 키워드",
+        "faq": "FAQ 형식 추천 키워드",
+        "tool": "툴 형식 추천 키워드",
+        "checklist": "체크리스트 형식 추천 키워드"
+      }
     },
-    "trends": {
-      "search_volume_trend": "지정된 기간 동안의 검색량 트렌드 (증가/감소/안정) 및 구체적 변화율, 예상 검색량 범위",
-      "seasonal_patterns": "지정된 기간 동안의 계절성 패턴 (특정 시기에 검색량이 증가/감소하는지, 구체적 날짜 및 이유)",
-      "trending_topics": ["지정된 기간 동안의 관련 트렌딩 토픽 1 (발생 시기 및 이유 포함)", "트렌딩 토픽 2", "트렌딩 토픽 3", "트렌딩 토픽 4", "트렌딩 토픽 5"],
-      "period_analysis": "지정된 기간 동안의 검색량 변화 상세 분석 (월별/주별 변화, 피크 시기, 하락 시기 등)",
-      "future_outlook": "향후 전망 (지정된 기간의 패턴을 기반으로 한 향후 6개월-1년간의 예상 트렌드)"
+    "sentiment_analysis": {
+      "sentiment_distribution": {
+        "positive": "긍정 비율 및 근거",
+        "negative": "부정 비율 및 근거",
+        "neutral": "중립 비율 및 근거"
+      },
+      "positive_drivers": {
+        "keywords": ["긍정 원인 키워드"],
+        "representative_sentences": ["대표 문장"]
+      },
+      "negative_drivers": {
+        "keywords": ["부정 원인 키워드"],
+        "representative_sentences": ["대표 문장"]
+      },
+      "risk_early_warning_keywords": ["리스크 조기 경보 키워드 세트"]
     },
-    "related_keywords": {
-      "semantic_keywords": ["의미적으로 관련된 키워드 1", "의미적으로 관련된 키워드 2", "의미적으로 관련된 키워드 3", "의미적으로 관련된 키워드 4", "의미적으로 관련된 키워드 5"],
-      "long_tail_keywords": ["롱테일 키워드 1 (검색량 및 경쟁도 포함)", "롱테일 키워드 2", "롱테일 키워드 3", "롱테일 키워드 4", "롱테일 키워드 5"],
-      "question_keywords": ["질문형 키워드 1", "질문형 키워드 2", "질문형 키워드 3", "질문형 키워드 4", "질문형 키워드 5"],
-      "comparison_keywords": ["비교형 키워드 1", "비교형 키워드 2", "비교형 키워드 3"]
-    },
-    "opportunities": ["SEO 기회 1 (구체적 실행 방안 포함)", "SEO 기회 2", "SEO 기회 3", "SEO 기회 4", "SEO 기회 5"],
-    "challenges": ["SEO 도전 과제 1 (해결 방안 포함)", "SEO 도전 과제 2", "SEO 도전 과제 3", "SEO 도전 과제 4"]
+    "competition_alternative_keywords": {
+      "competitors": ["경쟁 주체 후보군 (브랜드/카테고리/솔루션)"],
+      "positioning_framework": {
+        "price": "가격 포지셔닝",
+        "performance": "성능 포지셔닝",
+        "trust": "신뢰 포지셔닝",
+        "convenience": "편의 포지셔닝",
+        "support": "지원 포지셔닝"
+      },
+      "differentiation_points": ["차별화 포인트"]
+    }
   },
-  "strategic_recommendations": {
-    "immediate_actions": [
-      "즉시 실행 가능한 SEO 전략 1 (구체적 실행 방안, 예상 효과, 필요 리소스 포함)",
-      "즉시 실행 가능한 SEO 전략 2",
-      "즉시 실행 가능한 SEO 전략 3"
-    ],
-    "short_term_strategies": [
-      "단기 SEO 전략 1 (3-6개월, 구체적 실행 방안 포함)",
-      "단기 SEO 전략 2",
-      "단기 SEO 전략 3"
-    ],
-    "long_term_strategies": [
-      "장기 SEO 전략 1 (6개월 이상, 구체적 실행 방안 포함)",
-      "장기 SEO 전략 2",
-      "장기 SEO 전략 3"
-    ],
-    "success_metrics": "성공 지표 및 측정 방법 (KPI, 측정 주기, 목표 수치 등)"
+  "strategic_implications": {
+    "channel_operations": {
+      "priority_channels": [
+        {
+          "channel": "채널명",
+          "keyword_clusters": ["해당 채널에서 다룰 키워드 클러스터"],
+          "priority": "우선순위"
+        }
+      ]
+    },
+    "content_strategy": {
+      "tofu_mapping": {
+        "keywords": ["TOFU 단계 키워드"],
+        "content_types": ["콘텐츠 유형"]
+      },
+      "mofu_mapping": {
+        "keywords": ["MOFU 단계 키워드"],
+        "content_types": ["콘텐츠 유형"]
+      },
+      "bofu_mapping": {
+        "keywords": ["BOFU 단계 키워드"],
+        "content_types": ["콘텐츠 유형"]
+      },
+      "content_elements": {
+        "title_hook": "제목/후킹 전략",
+        "structure_outline": "구조(목차) 가이드",
+        "faq_aeo": "FAQ/AEO(답변형) 전략",
+        "geo_local": "GEO(지역 맥락) 전략"
+      }
+    },
+    "kpi_measurement": {
+      "kpi_definitions": ["KPI 정의"],
+      "dashboard_items": ["대시보드 항목"],
+      "measurement_cycle": "측정 주기"
+    }
   },
-  "target_audience": {
-    "expected_occupations": ["이 키워드와 관련된 주요 직업군 1", "직업군 2", "직업군 3", "직업군 4", "직업군 5"]
+  "execution_roadmap": {
+    "day_30": {
+      "priorities": ["30일 우선순위"],
+      "deliverables": ["산출물"],
+      "roles_responsibilities": "담당 역할 R&R"
+    },
+    "day_60": {
+      "priorities": ["60일 우선순위"],
+      "deliverables": ["산출물"],
+      "roles_responsibilities": "담당 역할 R&R"
+    },
+    "day_90": {
+      "priorities": ["90일 우선순위"],
+      "deliverables": ["산출물"],
+      "roles_responsibilities": "담당 역할 R&R"
+    },
+    "operational_direction": {
+      "editorial_calendar": "에디토리얼 캘린더 가이드 (주간/월간)",
+      "ab_testing": "실험 설계 (A/B)",
+      "repurposing_strategy": "리퍼포징 전략"
+    },
+    "marketing_governance": {
+      "approval_process": "승인/검수 프로세스",
+      "brand_safety": "브랜드 세이프티 가이드라인",
+      "risk_response_rules": "리스크 대응 룰"
+    }
+  },
+  "risk_response": {
+    "negative_issue_scenarios": ["부정 이슈 시나리오"],
+    "qa": ["Q&A"],
+    "brand_safety_checklist": ["브랜드 세이프티 체크리스트"]
+  },
+  "appendix": {
+    "keyword_list_by_cluster": {
+      "synonyms": ["동의어 키워드 리스트"],
+      "problem_solution": ["문제-해결형 키워드 리스트"],
+      "comparison": ["비교형 키워드 리스트"],
+      "purchase": ["구매형 키워드 리스트"],
+      "brand": ["브랜드형 키워드 리스트"]
+    },
+    "references": [
+      {
+        "id": 1,
+        "citation": "Publisher/Org. (Year, Month Day). Title. Source/Website.",
+        "url": "링크 (가능한 경우)"
+      }
+    ]
   }
 }
 """
-    else:  # competitor
-        # 경쟁자 분석에 특화된 매우 상세한 프롬프트
-        prompt = f"""
-당신은 글로벌 컨설팅 그룹의 시니어 경쟁 인텔리전스 및 시장 조사 컨설턴트입니다.
-다음 경쟁사 또는 경쟁 키워드에 대한 MECE 원칙에 기반한 구조화된 컨설팅 수준의 분석 보고서를 작성해주세요.
-
-**분석 대상**: {target_keyword}
+    else:  # comprehensive
+        # 종합 분석 프롬프트: 키워드 분석 + 오디언스 분석 핵심 통합 (토큰 최적화)
+        prompt = f"""Comprehensive analysis: {target_keyword}
 {period_info}
 {period_instruction}
-
-**분석 목적**: 이 분석은 경쟁 전략 수립, 시장 포지셔닝, 차별화 전략, 가격 전략, 시장 진입/확대 전략 등의 의사결정에 활용됩니다.
-따라서 모든 분석은 실행 가능한 경쟁 전략 인사이트와 구체적인 차별화 방안을 포함해야 합니다.
-
-**MECE 구조 요구사항**:
-1. Mutually Exclusive (상호 배타적): 각 섹션과 카테고리는 명확히 구분되어 중복이 없어야 합니다.
-2. Collectively Exhaustive (완전 포괄적): 경쟁 분석에 필요한 모든 측면을 포괄해야 합니다.
-3. 논리적 계층 구조: Executive Summary → Key Findings → Detailed Analysis → Strategic Recommendations 순서로 구성
-4. 컨설팅 문서 형식: 명확한 구조, 데이터 기반 결론, 실행 가능한 권장사항
 """
         if additional_context:
-            prompt += f"""
-**추가 컨텍스트**:
-{additional_context}
-
-"""
-        prompt += """
-**중요 지시사항**:
-1. 반드시 유효한 JSON 형식으로만 응답해야 합니다. 마크다운 코드 블록(```json)을 사용하지 마세요.
-2. MECE 원칙을 엄격히 준수하여 각 섹션이 상호 배타적이면서 완전 포괄적이어야 합니다.
-3. 정량적 데이터(시장 점유율, 경쟁 점수, 예상 수치, 시장 규모 등)와 정성적 분석(전략, 기회 등)을 모두 포함해야 합니다.
-4. 지정된 기간 동안의 시장 변화, 경쟁자 움직임, 시장 점유율 변화 등을 반드시 포함하여 분석해주세요.
-5. 컨설팅 수준의 전문성: 논리적 근거, 데이터 기반 결론, 실행 가능한 경쟁 전략을 제시해야 합니다.
-6. 문서 구조: Executive Summary → Key Findings → Detailed Analysis (MECE 구조) → Strategic Recommendations
-
-다음 JSON 구조를 정확히 따르면서 각 필드를 매우 상세하게 작성해주세요. 각 섹션은 MECE 원칙에 따라 명확히 구분되어야 합니다:
-
+            prompt += f"Context: {additional_context}\n"
+        
+        prompt += """Respond in JSON (combine keyword and audience insights, remove duplicates, focus on forward-looking recommendations):
 {
-  "executive_summary": "Executive Summary: 경쟁 환경에 대한 종합적인 요약 (3-5문단, 핵심 발견사항, 주요 인사이트, 전략적 권장사항 요약)",
+  "executive_summary": "3-5 paragraph summary integrating keyword opportunities and audience characteristics with strategic recommendations",
   "key_findings": {
-    "primary_insights": [
-      "경쟁 환경의 핵심 요약 (시장 구조, 경쟁 강도 등)",
-      "주요 경쟁자의 강점과 약점",
-      "시장 포지셔닝 및 차별화 포인트",
-      "경쟁 우위 확보 기회",
-      "이 시장의 고유한 특성과 차별점"
+    "integrated_insights": [
+      "keyword search intent aligned with audience needs",
+      "audience demographics matching keyword opportunity",
+      "trend convergence between search patterns and audience behavior",
+      "market opportunity size and accessibility",
+      "unique positioning combining keyword and audience strengths"
     ],
     "quantitative_metrics": {
-      "competition_level": "경쟁 수준 (낮음/중간/높음) 및 구체적 근거",
-      "market_opportunity": "시장 기회 크기 (낮음/중간/높음) 및 근거",
-      "differentiation_potential": "차별화 가능성 (낮음/중간/높음) 및 근거",
-      "risk_level": "위험 수준 (낮음/중간/높음) 및 주요 위험 요소",
-      "success_probability": "성공 확률 추정 (낮음/중간/높음) 및 근거"
+      "market_size": "estimated market size combining search volume and audience reach",
+      "opportunity_score": "1-100 combining keyword opportunity and audience accessibility",
+      "growth_potential": "low/medium/high with reason based on trends and audience growth",
+      "competition_level": "low/medium/high with reason",
+      "success_probability": "low/medium/high with reason"
     }
   },
-  "detailed_analysis": {
-    "competitive_environment": {
-      "main_competitors": ["주요 경쟁자 1 (상세 정보 포함)", "주요 경쟁자 2", "주요 경쟁자 3", "주요 경쟁자 4", "주요 경쟁자 5"],
-      "competition_intensity": "경쟁 강도 (낮음/중간/높음) 및 구체적 근거",
-      "market_structure": "시장 구조 (과점/독점/완전경쟁 등) 및 특성",
-      "market_positioning": "시장 포지셔닝 맵 (가격-품질, 기능-서비스 등)",
-      "barriers_to_entry": "진입 장벽 (기술적, 자본적, 규제적 등)",
-      "market_size": "시장 규모 추정 및 성장률"
+  "integrated_analysis": {
+    "keyword_audience_alignment": {
+      "search_intent_match": "how search intent aligns with audience needs and journey stage",
+      "keyword_opportunity_for_audience": "which keywords best reach target audience",
+      "audience_preferred_keywords": "keywords audience uses based on demographics and behavior",
+      "content_gap_analysis": "gaps between available content and audience needs"
     },
-    "competitor_analysis": {
-      "strengths": ["경쟁자의 주요 강점 1 (구체적 사례 포함)", "강점 2", "강점 3", "강점 4", "강점 5"],
-      "weaknesses": ["경쟁자의 약점 1 (구체적 사례 포함)", "약점 2", "약점 3", "약점 4", "약점 5"],
-      "differentiation_points": ["차별화 포인트 1 (구체적 전략 포함)", "차별화 포인트 2", "차별화 포인트 3", "차별화 포인트 4", "차별화 포인트 5"],
-      "market_share": "시장 점유율 추정 (주요 경쟁자별)",
-      "pricing_strategy": "경쟁자의 가격 전략 분석",
-      "marketing_strategy": "경쟁자의 마케팅 전략 분석",
-      "technology_stack": "경쟁자의 기술 스택 및 혁신 수준"
+    "core_keyword_insights": {
+      "primary_search_intent": "Informational/Navigational/Transactional/Commercial",
+      "key_opportunity_keywords": ["keyword1 with volume/competition", "keyword2", "keyword3", "keyword4", "keyword5"],
+      "trending_keywords": ["trending1 with timing", "trending2", "trending3"],
+      "search_volume_trend": "increase/decrease/stable with change rate for period"
     },
-    "trends": {
-      "market_trends": ["지정된 기간 동안의 시장 트렌드 1 (상세 설명 및 시계열 변화 포함)", "시장 트렌드 2", "시장 트렌드 3", "시장 트렌드 4", "시장 트렌드 5"],
-      "competitor_movements": ["지정된 기간 동안의 경쟁자 움직임 1 (구체적 시기 및 내용)", "경쟁자 움직임 2", "경쟁자 움직임 3"],
-      "industry_changes": "지정된 기간 동안의 산업 전반의 변화 및 영향 (구체적 시기 및 사건 포함)",
-      "period_analysis": "지정된 기간 동안의 시장 점유율, 경쟁 강도, 진입/퇴출 등의 변화 상세 분석"
+    "core_audience_insights": {
+      "target_demographics": {
+        "age_range": "age range",
+        "gender": "gender distribution",
+        "location": "regional distribution",
+        "income_level": "income range",
+        "expected_occupations": ["job1", "job2", "job3", "job4", "job5"]
+      },
+      "key_behavior_patterns": {
+        "purchase_behavior": "purchase patterns and decision factors",
+        "media_consumption": "preferred media and platforms",
+        "online_activity": "online behavior and platforms"
+      },
+      "core_values_and_needs": {
+        "primary_values": ["value1", "value2", "value3"],
+        "main_pain_points": ["pain1", "pain2", "pain3"],
+        "key_aspirations": ["aspiration1", "aspiration2", "aspiration3"]
+      }
     },
-    "opportunities": ["경쟁 우위 확보 기회 1 (구체적 실행 방안 포함)", "기회 2", "기회 3", "기회 4", "기회 5"],
-    "challenges": ["경쟁 도전 과제 1 (해결 방안 포함)", "도전 과제 2", "도전 과제 3", "도전 과제 4"]
+    "trends_and_patterns": {
+      "converging_trends": ["trend1 combining keyword and audience patterns", "trend2", "trend3", "trend4", "trend5"],
+      "period_analysis": "key changes during period combining search and audience shifts",
+      "future_outlook": "6-12 month forecast integrating keyword and audience trends"
+    }
   },
-  "strategic_recommendations": {
+  "forward_looking_recommendations": {
     "immediate_actions": [
-      "즉시 실행 가능한 경쟁 전략 1 (구체적 실행 방안, 예상 효과, 필요 리소스 포함)",
-      "즉시 실행 가능한 경쟁 전략 2",
-      "즉시 실행 가능한 경쟁 전략 3"
+      "action1 combining keyword targeting and audience messaging",
+      "action2 with specific keyword and audience focus",
+      "action3 with integrated approach"
     ],
-    "short_term_strategies": [
-      "단기 경쟁 전략 1 (3-6개월, 구체적 실행 방안 포함)",
-      "단기 경쟁 전략 2",
-      "단기 경쟁 전략 3"
+    "content_strategy": {
+      "recommended_topics": ["topic1 aligned with keywords and audience needs", "topic2", "topic3", "topic4", "topic5"],
+      "content_format": "best content formats for target audience and keyword intent",
+      "distribution_channels": ["channel1", "channel2", "channel3"]
+    },
+    "marketing_strategy": {
+      "keyword_targeting": "priority keywords to target based on audience alignment",
+      "messaging_framework": "core messages resonating with audience values and keyword intent",
+      "channel_strategy": "optimal channels combining keyword opportunities and audience behavior"
+    },
+    "short_term_goals": [
+      "goal1 (3-6 months) with keyword and audience metrics",
+      "goal2 with specific targets",
+      "goal3 with success criteria"
     ],
-    "long_term_strategies": [
-      "장기 경쟁 전략 1 (6개월 이상, 구체적 실행 방안 포함)",
-      "장기 경쟁 전략 2",
-      "장기 경쟁 전략 3"
+    "long_term_vision": [
+      "vision1 (6+ months) integrating keyword growth and audience expansion",
+      "vision2 with strategic direction",
+      "vision3 with market positioning"
     ],
-    "competitive_advantages": ["경쟁 우위 확보 방안 1 (구체적 전략 포함)", "방안 2", "방안 3"],
-    "market_entry_strategy": "시장 진입 전략 (신규 진입 시) 또는 시장 확대 전략 (기존 진입 시)",
-    "content_differentiation": ["콘텐츠 차별화 전략 1 (구체적 실행 방안)", "전략 2", "전략 3"],
-    "pricing_strategy": "가격 전략 제안 (경쟁자 대비)",
-    "partnership_opportunities": "파트너십 기회 및 협력 방안",
-    "success_metrics": "성공 지표 및 측정 방법 (KPI, 측정 주기, 목표 수치 등)"
+    "success_metrics": {
+      "keyword_metrics": "target search rankings, volume, and keyword performance",
+      "audience_metrics": "target audience reach, engagement, and conversion",
+      "integrated_kpis": "combined metrics showing keyword-audience alignment success"
+    }
   }
 }
 """
     
     return prompt
+
+
+def _split_into_sentences(text: str) -> list[str]:
+    """텍스트를 문장 단위로 분리 (한국어/영어 지원)"""
+    if not text or not text.strip():
+        return []
+    
+    # 문장 종료 패턴: 마침표, 느낌표, 물음표 (한국어/영어/일본어/중국어)
+    # 공백이나 줄바꿈이 뒤따르는 경우
+    sentence_pattern = re.compile(r'([.!?。！？]\s*|\n\s*\n)')
+    
+    sentences = []
+    last_end = 0
+    
+    for match in sentence_pattern.finditer(text):
+        end_pos = match.end()
+        sentence = text[last_end:end_pos].strip()
+        if sentence:
+            sentences.append(sentence)
+        last_end = end_pos
+    
+    # 마지막 문장 처리
+    if last_end < len(text):
+        remaining = text[last_end:].strip()
+        if remaining:
+            sentences.append(remaining)
+    
+    # 문장이 없으면 원본 텍스트를 그대로 반환
+    return sentences if sentences else [text.strip()] if text.strip() else []
+
+
+async def analyze_target_stream(
+    target_keyword: str,
+    target_type: str = "keyword",
+    additional_context: Optional[str] = None,
+    use_gemini: bool = False,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    progress_tracker: Optional[ProgressTracker] = None
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    타겟 분석을 스트리밍 방식으로 수행 (문장 단위 출력)
+    
+    Yields:
+        Dict[str, Any]: 문장 단위 분석 결과
+    """
+    try:
+        logger.info(f"타겟 분석 스트리밍 시작: {target_keyword} (타입: {target_type})")
+        
+        # API 키 확인
+        openai_env = os.getenv('OPENAI_API_KEY')
+        gemini_env = os.getenv('GEMINI_API_KEY')
+        openai_settings = getattr(settings, 'OPENAI_API_KEY', None)
+        gemini_settings = getattr(settings, 'GEMINI_API_KEY', None)
+        
+        openai_key = openai_env or openai_settings
+        gemini_key = gemini_env or gemini_settings
+        
+        has_openai_key = bool(openai_key and len(openai_key.strip()) > 0)
+        has_gemini_key = bool(gemini_key and len(gemini_key.strip()) > 0)
+        
+        if not has_openai_key and not has_gemini_key:
+            # 기본 분석 모드로 스트리밍
+            result = _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+            # 기본 분석 결과를 문장 단위로 분리하여 스트리밍
+            summary = result.get("executive_summary", "")
+            sentences = _split_into_sentences(summary)
+            for sentence in sentences:
+                yield {
+                    "type": "sentence",
+                    "content": sentence,
+                    "section": "executive_summary"
+                }
+            yield {"type": "complete", "data": result}
+            return
+        
+        # OpenAI 스트리밍
+        if has_openai_key:
+            async for chunk in _analyze_with_openai_stream(
+                target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+            ):
+                yield chunk
+                if chunk.get("type") == "complete":
+                    return
+        # Gemini 스트리밍
+        elif has_gemini_key:
+            async for chunk in _analyze_with_gemini_stream(
+                target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+            ):
+                yield chunk
+                if chunk.get("type") == "complete":
+                    return
+                    
+    except Exception as e:
+        logger.error(f"스트리밍 분석 중 오류: {e}", exc_info=True)
+        yield {
+            "type": "error",
+            "message": str(e)
+        }
+
+
+async def _analyze_with_openai_stream(
+    target_keyword: str,
+    target_type: str,
+    additional_context: Optional[str],
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    progress_tracker: Optional[ProgressTracker] = None
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """OpenAI API를 사용한 스트리밍 분석"""
+    try:
+        from openai import AsyncOpenAI
+        
+        # API 키 확인
+        api_key_env = os.getenv('OPENAI_API_KEY')
+        api_key_settings = getattr(settings, 'OPENAI_API_KEY', None)
+        api_key = api_key_env or api_key_settings
+        
+        if not api_key or len(api_key.strip()) == 0:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        client = AsyncOpenAI(api_key=api_key)
+        
+        # 프롬프트 생성
+        if progress_tracker:
+            await progress_tracker.update(20, "프롬프트 생성 중...")
+            yield {"type": "progress", "progress": 20, "message": "프롬프트 생성 중..."}
+        
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
+        prompt = optimize_prompt(prompt, max_length=4000)
+        
+        system_message = _build_system_message(target_type)
+        full_prompt_tokens = estimate_tokens(system_message) + estimate_tokens(prompt)
+        max_output_tokens = get_max_tokens_for_model(settings.OPENAI_MODEL, full_prompt_tokens)
+        
+        if progress_tracker:
+            await progress_tracker.update(30, "OpenAI API 요청 전송 중...")
+            yield {"type": "progress", "progress": 30, "message": "OpenAI API 요청 전송 중..."}
+        
+        # 스트리밍 API 호출
+        stream = await client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.5,
+            max_tokens=min(max_output_tokens, 4000),
+            response_format={"type": "json_object"},
+            stream=True
+        )
+        
+        accumulated_text = ""
+        current_section = "executive_summary"
+        buffer = ""
+        
+        async for chunk in stream:
+            if chunk.choices and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    content = delta.content
+                    accumulated_text += content
+                    buffer += content
+                    
+                    # 버퍼가 충분히 길어지거나 문장 종료 문자가 있으면 처리
+                    # 문장 단위로 분리하여 전송 (최소 길이 체크)
+                    if len(buffer) > 50 or any(char in buffer for char in ['.', '!', '?', '。', '！', '？', '\n']):
+                        sentences = _split_into_sentences(buffer)
+                        if len(sentences) > 1:
+                            # 완성된 문장들을 전송
+                            for sentence in sentences[:-1]:
+                                if sentence.strip():
+                                    yield {
+                                        "type": "sentence",
+                                        "content": sentence.strip(),
+                                        "section": current_section
+                                    }
+                            # 마지막 미완성 문장은 버퍼에 유지
+                            buffer = sentences[-1]
+        
+        # 마지막 버퍼 처리
+        if buffer.strip():
+            yield {
+                "type": "sentence",
+                "content": buffer.strip(),
+                "section": current_section
+            }
+        
+        if progress_tracker:
+            await progress_tracker.update(80, "AI 응답 수신 완료, 결과 파싱 중...")
+            yield {"type": "progress", "progress": 80, "message": "AI 응답 수신 완료, 결과 파싱 중..."}
+        
+        # 최종 결과 파싱 및 반환
+        try:
+            result = parse_json_with_fallback(accumulated_text)
+            if "target_keyword" not in result:
+                result["target_keyword"] = target_keyword
+            if "target_type" not in result:
+                result["target_type"] = target_type
+            
+            yield {"type": "complete", "data": result}
+        except Exception as e:
+            logger.error(f"JSON 파싱 실패: {e}")
+            yield {
+                "type": "complete",
+                "data": {
+                    "executive_summary": accumulated_text[:500],
+                    "target_keyword": target_keyword,
+                    "target_type": target_type,
+                    "error": "JSON 파싱 실패"
+                }
+            }
+            
+    except Exception as e:
+        logger.error(f"OpenAI 스트리밍 분석 중 오류: {e}", exc_info=True)
+        yield {"type": "error", "message": str(e)}
+
+
+async def _analyze_with_gemini_stream(
+    target_keyword: str,
+    target_type: str,
+    additional_context: Optional[str],
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    progress_tracker: Optional[ProgressTracker] = None
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """Gemini API를 사용한 스트리밍 분석"""
+    try:
+        import asyncio
+        
+        # API 키 확인
+        api_key_env = os.getenv('GEMINI_API_KEY')
+        api_key_settings = getattr(settings, 'GEMINI_API_KEY', None)
+        api_key = api_key_env or api_key_settings
+        
+        if not api_key or len(api_key.strip()) == 0:
+            raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다.")
+        
+        if progress_tracker:
+            await progress_tracker.update(20, "프롬프트 생성 중...")
+            yield {"type": "progress", "progress": 20, "message": "프롬프트 생성 중..."}
+        
+        additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
+        prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
+        prompt = optimize_prompt(prompt, max_length=4000)
+        
+        system_message = _build_system_message(target_type)
+        full_prompt = f"{system_message}\n\n{prompt}\n\nJSON only."
+        
+        model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        
+        if progress_tracker:
+            await progress_tracker.update(30, "Gemini API 요청 전송 중...")
+            yield {"type": "progress", "progress": 30, "message": "Gemini API 요청 전송 중..."}
+        
+        # Gemini 스트리밍 (새로운 API 방식 시도)
+        try:
+            from google import genai
+            
+            client = genai.Client(api_key=api_key)
+            accumulated_text = ""
+            buffer = ""
+            current_section = "executive_summary"
+            
+            # Gemini는 스트리밍을 지원하지만, 비동기 실행을 위해 run_in_executor 사용
+            loop = asyncio.get_event_loop()
+            
+            def generate_stream():
+                try:
+                    response = client.models.generate_content_stream(
+                        model=model_name,
+                        contents=full_prompt,
+                        config={
+                            "response_mime_type": "application/json",
+                            "temperature": 0.5
+                        }
+                    )
+                    return response
+                except Exception as e:
+                    logger.warning(f"JSON 모드 스트리밍 실패, 일반 모드로 재시도: {e}")
+                    return client.models.generate_content_stream(
+                        model=model_name,
+                        contents=full_prompt,
+                        config={"temperature": 0.5}
+                    )
+            
+            response_stream = await loop.run_in_executor(None, generate_stream)
+            
+            # 스트리밍 응답 처리
+            for chunk in response_stream:
+                text = None
+                if hasattr(chunk, 'text'):
+                    text = chunk.text
+                elif isinstance(chunk, str):
+                    text = chunk
+                
+                if text:
+                    accumulated_text += text
+                    buffer += text
+                    
+                    # 버퍼가 충분히 길어지거나 문장 종료 문자가 있으면 처리
+                    if len(buffer) > 50 or any(char in buffer for char in ['.', '!', '?', '。', '！', '？', '\n']):
+                        sentences = _split_into_sentences(buffer)
+                        if len(sentences) > 1:
+                            for sentence in sentences[:-1]:
+                                if sentence.strip():
+                                    yield {
+                                        "type": "sentence",
+                                        "content": sentence.strip(),
+                                        "section": current_section
+                                    }
+                            buffer = sentences[-1]
+            
+            # 마지막 버퍼 처리
+            if buffer.strip():
+                yield {
+                    "type": "sentence",
+                    "content": buffer.strip(),
+                    "section": current_section
+                }
+            
+        except ImportError:
+            # 기존 방식으로 fallback
+            import google.generativeai as genai_old
+            genai_old.configure(api_key=api_key)
+            model = genai_old.GenerativeModel(model_name)
+            
+            accumulated_text = ""
+            buffer = ""
+            current_section = "executive_summary"
+            
+            loop = asyncio.get_event_loop()
+            
+            def generate_stream_old():
+                return model.generate_content(
+                    full_prompt,
+                    generation_config={
+                        "response_mime_type": "application/json",
+                        "temperature": 0.5
+                    },
+                    stream=True
+                )
+            
+            response_stream = await loop.run_in_executor(None, generate_stream_old)
+            
+            for chunk in response_stream:
+                text = None
+                if hasattr(chunk, 'text'):
+                    text = chunk.text
+                elif isinstance(chunk, str):
+                    text = chunk
+                
+                if text:
+                    accumulated_text += text
+                    buffer += text
+                    
+                    # 버퍼가 충분히 길어지거나 문장 종료 문자가 있으면 처리
+                    if len(buffer) > 50 or any(char in buffer for char in ['.', '!', '?', '。', '！', '？', '\n']):
+                        sentences = _split_into_sentences(buffer)
+                        if len(sentences) > 1:
+                            for sentence in sentences[:-1]:
+                                if sentence.strip():
+                                    yield {
+                                        "type": "sentence",
+                                        "content": sentence.strip(),
+                                        "section": current_section
+                                    }
+                            buffer = sentences[-1]
+            
+            if buffer.strip():
+                yield {
+                    "type": "sentence",
+                    "content": buffer.strip(),
+                    "section": current_section
+                }
+        
+        if progress_tracker:
+            await progress_tracker.update(80, "AI 응답 수신 완료, 결과 파싱 중...")
+            yield {"type": "progress", "progress": 80, "message": "AI 응답 수신 완료, 결과 파싱 중..."}
+        
+        # 최종 결과 파싱
+        try:
+            result = parse_json_with_fallback(accumulated_text)
+            if "target_keyword" not in result:
+                result["target_keyword"] = target_keyword
+            if "target_type" not in result:
+                result["target_type"] = target_type
+            
+            yield {"type": "complete", "data": result}
+        except Exception as e:
+            logger.error(f"JSON 파싱 실패: {e}")
+            yield {
+                "type": "complete",
+                "data": {
+                    "executive_summary": accumulated_text[:500],
+                    "target_keyword": target_keyword,
+                    "target_type": target_type,
+                    "error": "JSON 파싱 실패"
+                }
+            }
+            
+    except Exception as e:
+        logger.error(f"Gemini 스트리밍 분석 중 오류: {e}", exc_info=True)
+        yield {"type": "error", "message": str(e)}

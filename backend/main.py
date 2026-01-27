@@ -473,8 +473,8 @@ async def root():
         <div class="main-container">
             <!-- 헤더 -->
             <div class="header">
-                <h1>뉴스 트렌드 분석 서비스</h1>
-                <p class="subtitle">AI 기반 키워드, 오디언스, 경쟁자 분석 플랫폼</p>
+                <h1>핵심 트렌드 분석 서비스</h1>
+                <p class="subtitle">AI 기반 키워드, 오디언스, 종합 분석 플랫폼</p>
                 <span class="status-badge">서비스 정상 운영 중</span>
             </div>
             
@@ -497,7 +497,7 @@ async def root():
                             <select id="target_type" name="target_type" required>
                                 <option value="keyword">키워드 분석</option>
                                 <option value="audience">오디언스 분석</option>
-                                <option value="competitor">경쟁자 분석</option>
+                                <option value="comprehensive">종합 분석</option>
                             </select>
                         </div>
                         
@@ -712,11 +712,32 @@ async def root():
                         }
                     }, 2000); // 2초마다 다음 단계로
                     
-                    // API URL 설정 (배포 환경 자동 감지)
+                    // API URL 설정 (스트리밍 엔드포인트 사용)
                     const apiBaseUrl = window.location.origin;
-                    const apiUrl = `${apiBaseUrl}/api/target/analyze`;
+                    const apiUrl = `${apiBaseUrl}/api/target/analyze/stream`;
                     
-                    console.log('API 호출:', apiUrl, formData);
+                    console.log('API 스트리밍 호출:', apiUrl, formData);
+                    
+                    // 결과 컨텐츠 초기화 및 표시
+                    resultSection.classList.add('show');
+                    resultContent.innerHTML = '';
+                    resultContent.style.display = 'block';
+                    
+                    let accumulatedResult = null;
+                    let currentSection = 'executive_summary';
+                    const sectionHeaders = {
+                        'executive_summary': '## 📋 Executive Summary\n\n',
+                        'key_findings': '\n## 🔍 Key Findings\n\n',
+                        'detailed_analysis': '\n## 📊 Detailed Analysis\n\n',
+                        'strategic_recommendations': '\n## 💡 Strategic Recommendations\n\n'
+                    };
+                    
+                    // 섹션 헤더 추가 함수
+                    function addSectionHeader(section) {
+                        if (sectionHeaders[section] && !resultContent.textContent.includes(sectionHeaders[section])) {
+                            resultContent.textContent += sectionHeaders[section];
+                        }
+                    }
                     
                     const response = await fetch(apiUrl, {
                         method: 'POST',
@@ -728,7 +749,7 @@ async def root():
                     
                     clearInterval(progressInterval);
                     
-                    console.log('API 응답 상태:', response.status, response.statusText);
+                    console.log('API 스트리밍 응답 상태:', response.status, response.statusText);
                     
                     if (!response.ok) {
                         let errorData = {};
@@ -741,8 +762,127 @@ async def root():
                         throw new Error(errorData.detail || errorData.error || errorData.message || '분석 요청 실패');
                     }
                     
-                    const data = await response.json();
-                    console.log('API 응답 데이터:', data);
+                    // 스트리밍 응답 읽기
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        
+                        if (done) {
+                            break;
+                        }
+                        
+                        // 디코딩 및 버퍼에 추가
+                        buffer += decoder.decode(value, { stream: true });
+                        
+                        // 줄 단위로 분리하여 처리
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || ''; // 마지막 불완전한 줄은 버퍼에 유지
+                        
+                        for (const line of lines) {
+                            if (!line.trim()) {
+                                continue;
+                            }
+                            
+                            try {
+                                const chunk = JSON.parse(line);
+                                console.log('스트리밍 청크:', chunk);
+                                
+                                // 문장 타입 처리
+                                if (chunk.type === 'sentence') {
+                                    const section = chunk.section || 'executive_summary';
+                                    
+                                    // 섹션이 변경되면 헤더 추가
+                                    if (section !== currentSection) {
+                                        addSectionHeader(section);
+                                        currentSection = section;
+                                    }
+                                    
+                                    // 문장 추가 (실시간 표시)
+                                    resultContent.textContent += chunk.content + ' ';
+                                    
+                                    // 스크롤을 맨 아래로
+                                    resultContent.scrollTop = resultContent.scrollHeight;
+                                }
+                                // 진행 상황 처리
+                                else if (chunk.type === 'progress') {
+                                    if (progressBar) {
+                                        progressBar.style.width = chunk.progress + '%';
+                                        progressBar.textContent = chunk.progress + '%';
+                                    }
+                                    if (progressPercentage) {
+                                        progressPercentage.textContent = chunk.progress + '%';
+                                    }
+                                    if (progressStep) {
+                                        progressStep.textContent = chunk.message || '분석 중...';
+                                    }
+                                }
+                                // 완료 처리
+                                else if (chunk.type === 'complete') {
+                                    accumulatedResult = chunk.data;
+                                    
+                                    if (progressBar) {
+                                        progressBar.style.width = '100%';
+                                        progressBar.textContent = '100%';
+                                    }
+                                    if (progressPercentage) {
+                                        progressPercentage.textContent = '100%';
+                                    }
+                                    if (progressStep) {
+                                        progressStep.textContent = '분석 완료';
+                                    }
+                                    
+                                    // 최종 결과가 있으면 추가 정보 표시
+                                    if (chunk.data) {
+                                        // 이미 표시된 내용 외에 추가 정보가 있으면 표시
+                                        // (예: key_findings, detailed_analysis 등)
+                                        console.log('최종 결과 수신:', chunk.data);
+                                    }
+                                    
+                                    break;
+                                }
+                                // 오류 처리
+                                else if (chunk.type === 'error') {
+                                    throw new Error(chunk.message || '알 수 없는 오류가 발생했습니다.');
+                                }
+                            } catch (parseError) {
+                                console.warn('JSON 파싱 실패:', line, parseError);
+                            }
+                        }
+                    }
+                    
+                    // 버퍼에 남은 데이터 처리
+                    if (buffer.trim()) {
+                        try {
+                            const chunk = JSON.parse(buffer);
+                            if (chunk.type === 'sentence') {
+                                const section = chunk.section || 'executive_summary';
+                                if (section !== currentSection) {
+                                    addSectionHeader(section);
+                                    currentSection = section;
+                                }
+                                resultContent.textContent += chunk.content + ' ';
+                                resultContent.scrollTop = resultContent.scrollHeight;
+                            } else if (chunk.type === 'complete') {
+                                accumulatedResult = chunk.data;
+                            }
+                        } catch (parseError) {
+                            console.warn('버퍼 파싱 실패:', buffer, parseError);
+                        }
+                    }
+                    
+                    // 기존 코드와의 호환성을 위해 data 변수 설정
+                    const data = accumulatedResult ? {
+                        success: true,
+                        data: accumulatedResult
+                    } : {
+                        success: false,
+                        error: '분석 결과를 받지 못했습니다.'
+                    };
+                    
+                    console.log('최종 분석 결과:', data);
                     
                     // 최종 진행률 업데이트 (이미 선언된 변수 사용)
                     if (progressBar) {
@@ -847,7 +987,7 @@ async def root():
                         const typeNames = {
                             'keyword': '키워드',
                             'audience': '오디언스',
-                            'competitor': '경쟁자'
+                            'comprehensive': '종합'
                         };
                         
                         resultText = `# 타겟 분석 보고서\\n\\n`;
@@ -1396,8 +1536,8 @@ async def root():
                                 });
                                 resultText += `\\n`;
                             }
-                        } else if (targetType === 'competitor' && analysisData) {
-                            // 경쟁자 분석 상세 포맷팅 (MECE 구조 지원)
+                        } else if (targetType === 'comprehensive' && analysisData) {
+                            // 종합 분석 상세 포맷팅 (키워드 + 오디언스 통합)
                             
                             // Executive Summary
                             if (analysisData.executive_summary) {
@@ -1421,10 +1561,10 @@ async def root():
                                 if (analysisData.key_findings.quantitative_metrics) {
                                     resultText += `### 정량적 지표\\n\\n`;
                                     const metrics = analysisData.key_findings.quantitative_metrics;
+                                    if (metrics.market_size) resultText += `- **시장 규모**: ${metrics.market_size}\\n`;
+                                    if (metrics.opportunity_score) resultText += `- **기회 점수**: ${metrics.opportunity_score}\\n`;
+                                    if (metrics.growth_potential) resultText += `- **성장 잠재력**: ${metrics.growth_potential}\\n`;
                                     if (metrics.competition_level) resultText += `- **경쟁 수준**: ${metrics.competition_level}\\n`;
-                                    if (metrics.market_opportunity) resultText += `- **시장 기회**: ${metrics.market_opportunity}\\n`;
-                                    if (metrics.differentiation_potential) resultText += `- **차별화 가능성**: ${metrics.differentiation_potential}\\n`;
-                                    if (metrics.risk_level) resultText += `- **위험 수준**: ${metrics.risk_level}\\n`;
                                     if (metrics.success_probability) resultText += `- **성공 확률**: ${metrics.success_probability}\\n`;
                                     resultText += `\\n`;
                                 }
@@ -1436,112 +1576,170 @@ async def root():
                                 resultText += `\\n`;
                             }
                             
-                            // Detailed Analysis
-                            const detailedAnalysis = analysisData.detailed_analysis || analysisData;
-                            const insights = detailedAnalysis.insights || analysisData.insights;
+                            // Integrated Analysis (키워드 + 오디언스 통합)
+                            const integrated = analysisData.integrated_analysis || analysisData.detailed_analysis || analysisData;
                             
-                            if (insights) {
-                                resultText += `## 💡 상세 분석 (Detailed Analysis)\\n\\n`;
+                            if (integrated) {
+                                resultText += `## 💡 통합 분석 (Integrated Analysis)\\n\\n`;
                                 
-                                if (insights.competitive_environment) {
-                                    resultText += `### 경쟁 환경\\n\\n`;
-                                    const env = insights.competitive_environment;
-                                    if (env.main_competitors && env.main_competitors.length > 0) {
-                                        resultText += `#### 주요 경쟁자\\n\\n`;
-                                        env.main_competitors.forEach((competitor, idx) => {
-                                            resultText += `${idx + 1}. ${competitor}\\n`;
-                                        });
-                                        resultText += `\\n`;
-                                    }
-                                    if (env.competition_intensity) resultText += `- **경쟁 강도**: ${env.competition_intensity}\\n`;
-                                    if (env.market_structure) resultText += `- **시장 구조**: ${env.market_structure}\\n`;
-                                    if (env.market_positioning) resultText += `- **시장 포지셔닝**: ${env.market_positioning}\\n`;
-                                    if (env.barriers_to_entry) resultText += `- **진입 장벽**: ${env.barriers_to_entry}\\n`;
-                                    if (env.market_size) resultText += `- **시장 규모**: ${env.market_size}\\n`;
+                                // Keyword-Audience Alignment
+                                if (integrated.keyword_audience_alignment) {
+                                    resultText += `### 키워드-오디언스 정렬 분석\\n\\n`;
+                                    const align = integrated.keyword_audience_alignment;
+                                    if (align.search_intent_match) resultText += `- **검색 의도-오디언스 매칭**: ${align.search_intent_match}\\n`;
+                                    if (align.keyword_opportunity_for_audience) resultText += `- **오디언스 타겟팅 키워드 기회**: ${align.keyword_opportunity_for_audience}\\n`;
+                                    if (align.audience_preferred_keywords) resultText += `- **오디언스 선호 키워드**: ${align.audience_preferred_keywords}\\n`;
+                                    if (align.content_gap_analysis) resultText += `- **콘텐츠 공백 분석**: ${align.content_gap_analysis}\\n`;
                                     resultText += `\\n`;
                                 }
                                 
-                                if (insights.competitor_analysis) {
-                                    resultText += `### 경쟁자 분석\\n\\n`;
-                                    const comp = insights.competitor_analysis;
-                                    if (comp.strengths && comp.strengths.length > 0) {
-                                        resultText += `#### 경쟁자의 강점\\n\\n`;
-                                        comp.strengths.forEach((strength, idx) => {
-                                            resultText += `${idx + 1}. ${strength}\\n`;
+                                // Core Keyword Insights
+                                if (integrated.core_keyword_insights) {
+                                    resultText += `### 핵심 키워드 인사이트\\n\\n`;
+                                    const kw = integrated.core_keyword_insights;
+                                    if (kw.primary_search_intent) resultText += `- **주요 검색 의도**: ${kw.primary_search_intent}\\n`;
+                                    if (kw.key_opportunity_keywords && Array.isArray(kw.key_opportunity_keywords)) {
+                                        resultText += `#### 주요 기회 키워드\\n\\n`;
+                                        kw.key_opportunity_keywords.forEach((k, idx) => {
+                                            resultText += `${idx + 1}. ${k}\\n`;
                                         });
                                         resultText += `\\n`;
                                     }
-                                    if (comp.weaknesses && comp.weaknesses.length > 0) {
-                                        resultText += `#### 경쟁자의 약점\\n\\n`;
-                                        comp.weaknesses.forEach((weakness, idx) => {
-                                            resultText += `${idx + 1}. ${weakness}\\n`;
+                                    if (kw.trending_keywords && Array.isArray(kw.trending_keywords)) {
+                                        resultText += `#### 트렌딩 키워드\\n\\n`;
+                                        kw.trending_keywords.forEach((k, idx) => {
+                                            resultText += `${idx + 1}. ${k}\\n`;
                                         });
                                         resultText += `\\n`;
                                     }
-                                    if (comp.differentiation_points && comp.differentiation_points.length > 0) {
-                                        resultText += `#### 차별화 포인트\\n\\n`;
-                                        comp.differentiation_points.forEach((point, idx) => {
-                                            resultText += `${idx + 1}. ${point}\\n`;
-                                        });
-                                        resultText += `\\n`;
-                                    }
-                                    if (comp.market_share) resultText += `- **시장 점유율**: ${comp.market_share}\\n`;
-                                    if (comp.pricing_strategy) resultText += `- **가격 전략**: ${comp.pricing_strategy}\\n`;
-                                    if (comp.marketing_strategy) resultText += `- **마케팅 전략**: ${comp.marketing_strategy}\\n`;
-                                    if (comp.technology_stack) resultText += `- **기술 스택**: ${comp.technology_stack}\\n`;
-                                    resultText += `\\n`;
+                                    if (kw.search_volume_trend) resultText += `- **검색량 트렌드**: ${kw.search_volume_trend}\\n\\n`;
                                 }
                                 
-                                if (insights.trends) {
-                                    resultText += `### 시장 트렌드\\n\\n`;
-                                    const trends = insights.trends;
-                                    if (trends.market_trends && trends.market_trends.length > 0) {
-                                        resultText += `#### 시장 트렌드\\n\\n`;
-                                        trends.market_trends.forEach((trend, idx) => {
+                                // Core Audience Insights
+                                if (integrated.core_audience_insights) {
+                                    resultText += `### 핵심 오디언스 인사이트\\n\\n`;
+                                    const aud = integrated.core_audience_insights;
+                                    
+                                    if (aud.target_demographics) {
+                                        resultText += `#### 타겟 인구통계\\n\\n`;
+                                        const demo = aud.target_demographics;
+                                        if (demo.age_range) resultText += `- **연령대**: ${demo.age_range}\\n`;
+                                        if (demo.gender) resultText += `- **성별**: ${demo.gender}\\n`;
+                                        if (demo.location) resultText += `- **지역**: ${demo.location}\\n`;
+                                        if (demo.income_level) resultText += `- **소득 수준**: ${demo.income_level}\\n`;
+                                        if (demo.expected_occupations && Array.isArray(demo.expected_occupations)) {
+                                            resultText += `- **예상 직업군**: ${demo.expected_occupations.join(', ')}\\n`;
+                                        }
+                                        resultText += `\\n`;
+                                    }
+                                    
+                                    if (aud.key_behavior_patterns) {
+                                        resultText += `#### 주요 행동 패턴\\n\\n`;
+                                        const beh = aud.key_behavior_patterns;
+                                        if (beh.purchase_behavior) resultText += `- **구매 행동**: ${beh.purchase_behavior}\\n`;
+                                        if (beh.media_consumption) resultText += `- **미디어 소비**: ${beh.media_consumption}\\n`;
+                                        if (beh.online_activity) resultText += `- **온라인 활동**: ${beh.online_activity}\\n`;
+                                        resultText += `\\n`;
+                                    }
+                                    
+                                    if (aud.core_values_and_needs) {
+                                        resultText += `#### 핵심 가치 및 니즈\\n\\n`;
+                                        const val = aud.core_values_and_needs;
+                                        if (val.primary_values && Array.isArray(val.primary_values)) {
+                                            resultText += `- **주요 가치**: ${val.primary_values.join(', ')}\\n`;
+                                        }
+                                        if (val.main_pain_points && Array.isArray(val.main_pain_points)) {
+                                            resultText += `- **주요 페인 포인트**: ${val.main_pain_points.join(', ')}\\n`;
+                                        }
+                                        if (val.key_aspirations && Array.isArray(val.key_aspirations)) {
+                                            resultText += `- **핵심 열망**: ${val.key_aspirations.join(', ')}\\n`;
+                                        }
+                                        resultText += `\\n`;
+                                    }
+                                }
+                                
+                                // Trends and Patterns
+                                if (integrated.trends_and_patterns) {
+                                    resultText += `### 트렌드 및 패턴\\n\\n`;
+                                    const trends = integrated.trends_and_patterns;
+                                    if (trends.converging_trends && Array.isArray(trends.converging_trends)) {
+                                        trends.converging_trends.forEach((trend, idx) => {
                                             resultText += `${idx + 1}. ${trend}\\n`;
                                         });
                                         resultText += `\\n`;
                                     }
-                                    if (trends.competitor_movements && trends.competitor_movements.length > 0) {
-                                        resultText += `#### 경쟁자의 최근 움직임\\n\\n`;
-                                        trends.competitor_movements.forEach((movement, idx) => {
-                                            resultText += `${idx + 1}. ${movement}\\n`;
-                                        });
-                                        resultText += `\\n`;
-                                    }
-                                    if (trends.industry_changes) resultText += `- **산업 전반의 변화**: ${trends.industry_changes}\\n\\n`;
-                                }
-                                
-                                if (insights.opportunities && Array.isArray(insights.opportunities) && insights.opportunities.length > 0) {
-                                    resultText += `### 경쟁 우위 확보 기회\\n\\n`;
-                                    insights.opportunities.forEach((opp, idx) => {
-                                        resultText += `${idx + 1}. ${opp}\\n`;
-                                    });
-                                    resultText += `\\n`;
-                                }
-                                
-                                if (insights.challenges && Array.isArray(insights.challenges) && insights.challenges.length > 0) {
-                                    resultText += `### 경쟁 도전 과제\\n\\n`;
-                                    insights.challenges.forEach((challenge, idx) => {
-                                        resultText += `${idx + 1}. ${challenge}\\n`;
-                                    });
+                                    if (trends.period_analysis) resultText += `- **기간별 분석**: ${trends.period_analysis}\\n`;
+                                    if (trends.future_outlook) resultText += `- **향후 전망**: ${trends.future_outlook}\\n`;
                                     resultText += `\\n`;
                                 }
                             }
                             
-                            if (analysisData.strategic_recommendations) {
-                                resultText += `## 🎯 전략적 제안\\n\\n`;
-                                const strat = analysisData.strategic_recommendations;
-                                if (strat.competitive_advantages && strat.competitive_advantages.length > 0) {
-                                    resultText += `### 경쟁 우위 확보 방안\\n\\n`;
-                                    strat.competitive_advantages.forEach((adv, idx) => {
-                                        resultText += `${idx + 1}. ${adv}\\n`;
+                            // Forward-Looking Recommendations
+                            if (analysisData.forward_looking_recommendations) {
+                                resultText += `## 🚀 앞으로의 제안 방향 (Forward-Looking Recommendations)\\n\\n`;
+                                const rec = analysisData.forward_looking_recommendations;
+                                
+                                if (rec.immediate_actions && Array.isArray(rec.immediate_actions)) {
+                                    resultText += `### 즉시 실행 가능한 액션\\n\\n`;
+                                    rec.immediate_actions.forEach((action, idx) => {
+                                        resultText += `${idx + 1}. ${action}\\n`;
                                     });
                                     resultText += `\\n`;
                                 }
-                                if (strat.market_entry_strategy) {
-                                    resultText += `### 시장 진입/확대 전략\\n\\n${strat.market_entry_strategy}\\n\\n`;
+                                
+                                if (rec.content_strategy) {
+                                    resultText += `### 콘텐츠 전략\\n\\n`;
+                                    const cs = rec.content_strategy;
+                                    if (cs.recommended_topics && Array.isArray(cs.recommended_topics)) {
+                                        resultText += `#### 추천 주제\\n\\n`;
+                                        cs.recommended_topics.forEach((topic, idx) => {
+                                            resultText += `${idx + 1}. ${topic}\\n`;
+                                        });
+                                        resultText += `\\n`;
+                                    }
+                                    if (cs.content_format) resultText += `- **콘텐츠 형식**: ${cs.content_format}\\n`;
+                                    if (cs.distribution_channels && Array.isArray(cs.distribution_channels)) {
+                                        resultText += `- **배포 채널**: ${cs.distribution_channels.join(', ')}\\n`;
+                                    }
+                                    resultText += `\\n`;
                                 }
+                                
+                                if (rec.marketing_strategy) {
+                                    resultText += `### 마케팅 전략\\n\\n`;
+                                    const ms = rec.marketing_strategy;
+                                    if (ms.keyword_targeting) resultText += `- **키워드 타겟팅**: ${ms.keyword_targeting}\\n`;
+                                    if (ms.messaging_framework) resultText += `- **메시징 프레임워크**: ${ms.messaging_framework}\\n`;
+                                    if (ms.channel_strategy) resultText += `- **채널 전략**: ${ms.channel_strategy}\\n`;
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (rec.short_term_goals && Array.isArray(rec.short_term_goals)) {
+                                    resultText += `### 단기 목표 (3-6개월)\\n\\n`;
+                                    rec.short_term_goals.forEach((goal, idx) => {
+                                        resultText += `${idx + 1}. ${goal}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (rec.long_term_vision && Array.isArray(rec.long_term_vision)) {
+                                    resultText += `### 장기 비전 (6개월 이상)\\n\\n`;
+                                    rec.long_term_vision.forEach((vision, idx) => {
+                                        resultText += `${idx + 1}. ${vision}\\n`;
+                                    });
+                                    resultText += `\\n`;
+                                }
+                                
+                                if (rec.success_metrics) {
+                                    resultText += `### 성공 지표\\n\\n`;
+                                    const sm = rec.success_metrics;
+                                    if (sm.keyword_metrics) resultText += `- **키워드 지표**: ${sm.keyword_metrics}\\n`;
+                                    if (sm.audience_metrics) resultText += `- **오디언스 지표**: ${sm.audience_metrics}\\n`;
+                                    if (sm.integrated_kpis) resultText += `- **통합 KPI**: ${sm.integrated_kpis}\\n`;
+                                    resultText += `\\n`;
+                                }
+                            } else if (analysisData.strategic_recommendations) {
+                                resultText += `## 🎯 전략적 제안\\n\\n`;
+                                const strat = analysisData.strategic_recommendations;
                                 if (strat.content_differentiation && strat.content_differentiation.length > 0) {
                                     resultText += `### 콘텐츠 차별화 전략\\n\\n`;
                                     strat.content_differentiation.forEach((strategy, idx) => {

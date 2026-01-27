@@ -8,7 +8,8 @@ import json
 
 from backend.config import settings
 from backend.utils.token_optimizer import (
-    optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context
+    optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context,
+    parse_json_with_fallback
 )
 
 logger = logging.getLogger(__name__)
@@ -172,30 +173,12 @@ async def _recommend_with_gemini(
             )
             result_text = response.text if hasattr(response, 'text') else str(response)
         
-        # 마크다운 코드 블록 제거
-        clean_text = result_text.strip()
-        if clean_text.startswith("```json"):
-            clean_text = clean_text[7:]
-        if clean_text.startswith("```"):
-            clean_text = clean_text[3:]
-        if clean_text.endswith("```"):
-            clean_text = clean_text[:-3]
-        clean_text = clean_text.strip()
-        
+        # 강화된 JSON 파싱 사용
         try:
-            result = json.loads(clean_text)
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON 파싱 실패, 재시도: {e}")
-            try:
-                start_idx = clean_text.find("{")
-                end_idx = clean_text.rfind("}") + 1
-                if start_idx >= 0 and end_idx > start_idx:
-                    result = json.loads(clean_text[start_idx:end_idx])
-                else:
-                    raise ValueError("유효한 JSON을 찾을 수 없습니다.")
-            except Exception as e2:
-                logger.error(f"JSON 파싱 최종 실패: {e2}")
-                result = {"related_keywords": {"error": "JSON 파싱 실패", "raw_response": clean_text[:500]}}
+            result = parse_json_with_fallback(result_text)
+        except ValueError as e:
+            logger.error(f"JSON 파싱 최종 실패: {e}")
+            result = {"related_keywords": {"error": "JSON 파싱 실패", "raw_response": result_text[:1000] if len(result_text) > 1000 else result_text}}
         
         return result
         
@@ -253,30 +236,12 @@ Your recommendations must be data-driven, market-specific (Korean market), and a
         if not result_text:
             raise ValueError("OpenAI API 응답이 비어있습니다.")
         
-        # 마크다운 코드 블록 제거
-        clean_text = result_text.strip()
-        if clean_text.startswith("```json"):
-            clean_text = clean_text[7:]
-        if clean_text.startswith("```"):
-            clean_text = clean_text[3:]
-        if clean_text.endswith("```"):
-            clean_text = clean_text[:-3]
-        clean_text = clean_text.strip()
-        
+        # 강화된 JSON 파싱 사용
         try:
-            result = json.loads(clean_text)
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON 파싱 실패, 재시도: {e}")
-            try:
-                start_idx = clean_text.find("{")
-                end_idx = clean_text.rfind("}") + 1
-                if start_idx >= 0 and end_idx > start_idx:
-                    result = json.loads(clean_text[start_idx:end_idx])
-                else:
-                    raise ValueError("유효한 JSON을 찾을 수 없습니다.")
-            except Exception as e2:
-                logger.error(f"JSON 파싱 최종 실패: {e2}")
-                result = {"related_keywords": {"error": "JSON 파싱 실패", "raw_response": clean_text[:500]}}
+            result = parse_json_with_fallback(result_text)
+        except ValueError as e:
+            logger.error(f"JSON 파싱 최종 실패: {e}")
+            result = {"related_keywords": {"error": "JSON 파싱 실패", "raw_response": result_text[:1000] if len(result_text) > 1000 else result_text}}
         
         return result
         

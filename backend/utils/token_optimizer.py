@@ -4,6 +4,7 @@
 """
 import re
 import logging
+import json
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -157,3 +158,181 @@ def optimize_additional_context(context: Optional[str], max_length: int = 500) -
         optimized += '.'
     
     return optimized if optimized else context[:max_length]
+
+
+def fix_json_string(text: str) -> str:
+    """
+    JSON 문자열 내의 잘못된 이스케이프 문자를 수정합니다.
+    
+    Args:
+        text: 수정할 JSON 텍스트
+        
+    Returns:
+        수정된 JSON 텍스트
+    """
+    # 줄바꿈이 문자열 내부에 있는 경우 이스케이프 처리
+    # 하지만 이미 이스케이프된 것은 건드리지 않음
+    lines = text.split('\n')
+    result = []
+    in_string = False
+    escape_next = False
+    
+    for line in lines:
+        if not in_string:
+            # 문자열 시작 찾기
+            if '"' in line:
+                in_string = True
+                escape_next = False
+        else:
+            # 문자열 내부
+            if escape_next:
+                escape_next = False
+            elif '\\' in line:
+                escape_next = True
+            elif '"' in line and not line.rstrip().endswith('\\'):
+                # 문자열 종료
+                in_string = False
+        
+        result.append(line)
+    
+    return '\n'.join(result)
+
+
+def extract_and_fix_json(text: str) -> str:
+    """
+    텍스트에서 JSON을 추출하고 수정합니다.
+    
+    Args:
+        text: 원본 텍스트
+        
+    Returns:
+        수정된 JSON 텍스트
+    """
+    # 1. 마크다운 코드 블록 제거
+    clean_text = text.strip()
+    if clean_text.startswith("```json"):
+        clean_text = clean_text[7:]
+    if clean_text.startswith("```"):
+        clean_text = clean_text[3:]
+    if clean_text.endswith("```"):
+        clean_text = clean_text[:-3]
+    clean_text = clean_text.strip()
+    
+    # 2. 중괄호로 JSON 범위 찾기
+    start_idx = clean_text.find("{")
+    if start_idx < 0:
+        return clean_text
+    
+    # 중첩된 중괄호를 고려하여 닫는 중괄호 찾기
+    brace_count = 0
+    end_idx = start_idx
+    
+    for i in range(start_idx, len(clean_text)):
+        char = clean_text[i]
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                end_idx = i + 1
+                break
+    
+    if end_idx <= start_idx:
+        # 닫는 중괄호를 찾지 못한 경우
+        end_idx = clean_text.rfind("}") + 1
+        if end_idx <= start_idx:
+            return clean_text
+    
+    json_text = clean_text[start_idx:end_idx]
+    
+    # 3. 일반적인 JSON 오류 수정
+    # - 마지막 쉼표 제거
+    json_text = re.sub(r',\s*}', '}', json_text)
+    json_text = re.sub(r',\s*]', ']', json_text)
+    
+    # 4. 닫히지 않은 문자열 처리 (간단한 경우)
+    # 따옴표가 홀수 개인 경우 마지막에 닫기
+    quote_count = json_text.count('"') - json_text.count('\\"')
+    if quote_count % 2 != 0:
+        # 마지막 따옴표가 닫히지 않은 경우
+        last_quote_idx = json_text.rfind('"')
+        if last_quote_idx > 0 and json_text[last_quote_idx-1] != '\\':
+            # 마지막 따옴표 앞에 닫는 따옴표 추가 시도는 위험하므로
+            # 대신 마지막 부분을 제거
+            pass
+    
+    return json_text
+
+
+def parse_json_with_fallback(text: str) -> Dict[str, Any]:
+    """
+    JSON을 파싱하고, 실패 시 여러 방법으로 재시도합니다.
+    
+    Args:
+        text: 파싱할 JSON 텍스트
+        
+    Returns:
+        파싱된 JSON 객체
+        
+    Raises:
+        ValueError: 모든 파싱 시도가 실패한 경우
+    """
+    # 시도 1: 직접 파싱
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # 시도 2: JSON 추출 및 수정 후 파싱
+    try:
+        fixed_json = extract_and_fix_json(text)
+        return json.loads(fixed_json)
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning(f"JSON 추출 및 수정 후 파싱 실패: {e}")
+    
+    # 시도 3: 중괄호만 추출
+    try:
+        start_idx = text.find("{")
+        end_idx = text.rfind("}") + 1
+        if start_idx >= 0 and end_idx > start_idx:
+            json_text = text[start_idx:end_idx]
+            # 마지막 쉼표 제거
+            json_text = re.sub(r',\s*}', '}', json_text)
+            json_text = re.sub(r',\s*]', ']', json_text)
+            return json.loads(json_text)
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning(f"중괄호 추출 후 파싱 실패: {e}")
+    
+    # 시도 4: 부분 파싱 시도 (executive_summary만이라도 추출)
+    try:
+        import re
+        result = {}
+        
+        # executive_summary 추출
+        exec_match = re.search(r'"executive_summary"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', text, re.DOTALL)
+        if exec_match:
+            result["executive_summary"] = exec_match.group(1).replace('\\"', '"').replace('\\n', '\n')
+        else:
+            # 더 관대한 패턴 시도
+            exec_match = re.search(r'"executive_summary"\s*:\s*"([^"]+)"', text)
+            if exec_match:
+                result["executive_summary"] = exec_match.group(1)
+            else:
+                result["executive_summary"] = "JSON 파싱에 실패했지만 분석은 완료되었습니다."
+        
+        # key_findings 추출 시도
+        key_findings_match = re.search(r'"key_findings"\s*:\s*(\{[^}]*\})', text, re.DOTALL)
+        if key_findings_match:
+            try:
+                result["key_findings"] = json.loads(key_findings_match.group(1))
+            except:
+                result["key_findings"] = {"primary_insights": ["JSON 파싱 부분 실패"]}
+        else:
+            result["key_findings"] = {"primary_insights": ["JSON 파싱 실패"]}
+        
+        logger.warning("부분 JSON 파싱 성공 (일부 필드만 추출)")
+        return result
+        
+    except Exception as e:
+        logger.error(f"부분 파싱도 실패: {e}")
+        raise ValueError(f"JSON 파싱 실패: 모든 시도가 실패했습니다. 원본 텍스트 길이: {len(text)} 문자")

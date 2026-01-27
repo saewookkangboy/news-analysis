@@ -2,10 +2,12 @@
 API 라우트
 """
 import logging
+import json
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Body, Query
+from fastapi.responses import StreamingResponse
 
-from backend.services.target_analyzer import analyze_target
+from backend.services.target_analyzer import analyze_target, analyze_target_stream
 from backend.services.sentiment_analyzer import analyze_sentiment, analyze_context, analyze_tone
 from backend.services.keyword_recommender import recommend_keywords
 from backend.services.progress_tracker import create_progress_tracker, get_progress_tracker, remove_progress_tracker
@@ -15,10 +17,87 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.post("/target/analyze/stream")
+async def analyze_target_stream_endpoint(
+    target_keyword: str = Body(..., description="분석할 타겟 키워드 또는 주제"),
+    target_type: str = Body("keyword", description="분석 유형: keyword, audience, comprehensive"),
+    additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
+    use_gemini: bool = Body(False, description="Gemini API 사용 여부"),
+    start_date: Optional[str] = Body(None, description="분석 시작일 (YYYY-MM-DD 형식)"),
+    end_date: Optional[str] = Body(None, description="분석 종료일 (YYYY-MM-DD 형식)")
+):
+    """AI를 사용하여 타겟 분석을 스트리밍 방식으로 수행합니다 (문장 단위 실시간 출력)."""
+    try:
+        logger.info(f"타겟 분석 스트리밍 요청: {target_keyword} ({target_type})")
+        
+        # 타겟 타입 검증
+        if target_type not in ["keyword", "audience", "comprehensive"]:
+            raise HTTPException(
+                status_code=400,
+                detail="target_type은 'keyword', 'audience', 'comprehensive' 중 하나여야 합니다."
+            )
+        
+        # Progress tracker 생성
+        try:
+            progress_tracker = create_progress_tracker()
+        except Exception as e:
+            logger.warning(f"Progress tracker 생성 실패 (계속 진행): {e}")
+            progress_tracker = None
+        
+        async def generate():
+            try:
+                async for chunk in analyze_target_stream(
+                    target_keyword=target_keyword,
+                    target_type=target_type,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini,
+                    start_date=start_date,
+                    end_date=end_date,
+                    progress_tracker=progress_tracker
+                ):
+                    # JSON 형식으로 스트리밍
+                    yield json.dumps(chunk, ensure_ascii=False) + "\n"
+                    
+                    # 완료 또는 오류 시 종료
+                    if chunk.get("type") in ["complete", "error"]:
+                        break
+            except Exception as e:
+                logger.error(f"스트리밍 생성 중 오류: {e}", exc_info=True)
+                yield json.dumps({
+                    "type": "error",
+                    "message": str(e)
+                }, ensure_ascii=False) + "\n"
+            finally:
+                # Progress tracker 정리
+                if progress_tracker:
+                    try:
+                        remove_progress_tracker(progress_tracker.task_id)
+                    except Exception as e:
+                        logger.warning(f"Progress tracker 정리 실패: {e}")
+        
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"타겟 분석 스트리밍 중 오류: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"타겟 분석 스트리밍 실패: {str(e)}"
+        )
+
+
 @router.post("/target/analyze")
 async def analyze_target_endpoint(
     target_keyword: str = Body(..., description="분석할 타겟 키워드 또는 주제"),
-    target_type: str = Body("keyword", description="분석 유형: keyword, audience, competitor"),
+    target_type: str = Body("keyword", description="분석 유형: keyword, audience, comprehensive"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
     use_gemini: bool = Body(False, description="Gemini API 사용 여부"),
     start_date: Optional[str] = Body(None, description="분석 시작일 (YYYY-MM-DD 형식)"),
@@ -32,10 +111,10 @@ async def analyze_target_endpoint(
         logger.info(f"요청 파라미터 - use_gemini: {use_gemini}, start_date: {start_date}, end_date: {end_date}")
         
         # 타겟 타입 검증
-        if target_type not in ["keyword", "audience", "competitor"]:
+        if target_type not in ["keyword", "audience", "comprehensive"]:
             raise HTTPException(
                 status_code=400,
-                detail="target_type은 'keyword', 'audience', 'competitor' 중 하나여야 합니다."
+                detail="target_type은 'keyword', 'audience', 'comprehensive' 중 하나여야 합니다."
             )
         
         # Progress tracker 생성
@@ -143,7 +222,7 @@ async def analyze_target_endpoint(
 @router.get("/target/analyze")
 async def analyze_target_get(
     target_keyword: str = Query(..., description="분석할 타겟 키워드 또는 주제"),
-    target_type: str = Query("keyword", description="분석 유형: keyword, audience, competitor"),
+    target_type: str = Query("keyword", description="분석 유형: keyword, audience, comprehensive"),
     additional_context: Optional[str] = Query(None, description="추가 컨텍스트 정보"),
     use_gemini: bool = Query(False, description="Gemini API 사용 여부"),
     start_date: Optional[str] = Query(None, description="분석 시작일 (YYYY-MM-DD 형식)"),
@@ -154,10 +233,10 @@ async def analyze_target_get(
         logger.info(f"타겟 분석 요청 (GET): {target_keyword} ({target_type})")
         
         # 타겟 타입 검증
-        if target_type not in ["keyword", "audience", "competitor"]:
+        if target_type not in ["keyword", "audience", "comprehensive"]:
             raise HTTPException(
                 status_code=400,
-                detail="target_type은 'keyword', 'audience', 'competitor' 중 하나여야 합니다."
+                detail="target_type은 'keyword', 'audience', 'comprehensive' 중 하나여야 합니다."
             )
         
         # 타겟 분석 수행
@@ -318,7 +397,7 @@ async def recommend_keywords_endpoint(
 @router.post("/analysis/comprehensive")
 async def comprehensive_analysis_endpoint(
     target_keyword: str = Body(..., description="분석할 키워드"),
-    target_type: str = Body("keyword", description="분석 유형: keyword, audience, competitor"),
+    target_type: str = Body("keyword", description="분석 유형: keyword, audience, comprehensive"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
     use_gemini: bool = Body(False, description="Gemini API 사용 여부"),
     analysis_depth: str = Body("standard", description="분석 깊이: basic, standard, deep")
