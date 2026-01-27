@@ -54,7 +54,7 @@ window.addEventListener('DOMContentLoaded', function() {
     
     // URL 파라미터로 폼 채우기
     if (urlParams.has('target_keyword') && targetKeywordInput) {
-        targetKeywordInput.value = decodeURIComponent(urlParams.get('target_keyword'));
+        targetKeywordInput.value = urlParams.get('target_keyword');
     }
     
     if (urlParams.has('target_type') && targetTypeSelect) {
@@ -74,7 +74,7 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     
     if (urlParams.has('additional_context') && additionalContextInput) {
-        additionalContextInput.value = decodeURIComponent(urlParams.get('additional_context'));
+        additionalContextInput.value = urlParams.get('additional_context');
     }
     
     if (urlParams.has('use_gemini') && useGeminiCheckbox) {
@@ -125,6 +125,6 @@ const apiUrl = apiBaseUrl + '/api/target/analyze/stream';
 
 ## 참고 사항
 
-- URL 파라미터는 `decodeURIComponent`를 사용하여 디코딩합니다.
+- `URLSearchParams.get()`은 자동으로 URL 디코딩을 수행하므로, 추가로 `decodeURIComponent`를 호출할 필요가 없습니다.
 - `use_gemini` 파라미터는 `'on'` 또는 `'true'` 값을 모두 처리합니다.
 - 날짜 파라미터가 없으면 기본값(최근 3개월)을 사용합니다.

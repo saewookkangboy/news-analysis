@@ -576,6 +576,36 @@ async def root():
                 const threeMonthsAgo = new Date();
                 threeMonthsAgo.setMonth(today.getMonth() - 3);
                 
+                // 길이 제한 상수
+                const MAX_TARGET_KEYWORD_LENGTH = 200;
+                const MAX_ADDITIONAL_CONTEXT_LENGTH = 2000;
+                
+                // 허용된 target_type 값
+                const allowedTypes = ["keyword", "audience", "comprehensive"];
+                
+                // 날짜 유효성 검사 헬퍼 함수
+                function isValidDate(dateString) {
+                    if (!dateString) return false;
+                    
+                    // YYYY-MM-DD 형식 정규식 검사
+                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                    if (!dateRegex.test(dateString)) {
+                        return false;
+                    }
+                    
+                    // Date 객체로 파싱하여 유효성 검사
+                    const date = new Date(dateString + "T00:00:00");
+                    if (isNaN(date.getTime())) {
+                        return false;
+                    }
+                    
+                    // 입력된 문자열과 파싱된 날짜가 일치하는지 확인 (예: 2025-13-01 같은 경우 방지)
+                    const [year, month, day] = dateString.split("-").map(Number);
+                    return date.getFullYear() === year &&
+                           date.getMonth() === month - 1 &&
+                           date.getDate() === day;
+                }
+                
                 // URL 파라미터 읽기
                 const urlParams = new URLSearchParams(window.location.search);
                 
@@ -586,39 +616,91 @@ async def root():
                 const additionalContextInput = document.getElementById("additional_context");
                 const useGeminiCheckbox = document.getElementById("use_gemini");
                 
-                // URL 파라미터로 폼 채우기
+                // URL 파라미터로 폼 채우기 (검증 포함)
+                
+                // target_keyword 처리 (길이 제한 + 디코딩 에러 처리)
                 if (urlParams.has("target_keyword") && targetKeywordInput) {
                     const keywordValue = urlParams.get("target_keyword");
                     if (keywordValue) {
-                        targetKeywordInput.value = decodeURIComponent(keywordValue);
+                        try {
+                            // URLSearchParams는 자동 디코딩하지만, 이중 인코딩된 경우를 대비
+                            const decodedValue = decodeURIComponent(keywordValue);
+                            if (decodedValue.length <= MAX_TARGET_KEYWORD_LENGTH) {
+                                targetKeywordInput.value = decodedValue;
+                            }
+                        } catch (e) {
+                            // 잘못된 인코딩 처리 - 무시
+                            console.warn("Invalid URL encoding for target_keyword:", e);
+                        }
                     }
                 }
                 
+                // target_type 처리 (허용된 값 검증)
                 if (urlParams.has("target_type") && targetTypeSelect) {
-                    targetTypeSelect.value = urlParams.get("target_type");
+                    const targetTypeValue = urlParams.get("target_type");
+                    if (targetTypeValue) {
+                        // 허용된 타입 배열에서 확인
+                        if (allowedTypes.includes(targetTypeValue)) {
+                            // select 옵션에서도 확인
+                            const optionExists = Array.from(targetTypeSelect.options).some(
+                                option => option.value === targetTypeValue
+                            );
+                            if (optionExists) {
+                                targetTypeSelect.value = targetTypeValue;
+                            }
+                        }
+                    }
                 }
                 
+                // start_date 처리 (날짜 유효성 검사 + 폴백)
                 if (urlParams.has("start_date") && startDateInput) {
-                    startDateInput.value = urlParams.get("start_date");
+                    const startDateValue = urlParams.get("start_date");
+                    if (startDateValue && isValidDate(startDateValue)) {
+                        startDateInput.value = startDateValue;
+                    } else if (startDateInput) {
+                        startDateInput.value = threeMonthsAgo.toISOString().split("T")[0];
+                    }
                 } else if (startDateInput) {
                     startDateInput.value = threeMonthsAgo.toISOString().split("T")[0];
                 }
                 
+                // end_date 처리 (날짜 유효성 검사 + 폴백)
                 if (urlParams.has("end_date") && endDateInput) {
-                    endDateInput.value = urlParams.get("end_date");
+                    const endDateValue = urlParams.get("end_date");
+                    if (endDateValue && isValidDate(endDateValue)) {
+                        endDateInput.value = endDateValue;
+                    } else if (endDateInput) {
+                        endDateInput.value = today.toISOString().split("T")[0];
+                    }
                 } else if (endDateInput) {
                     endDateInput.value = today.toISOString().split("T")[0];
                 }
                 
+                // additional_context 처리 (길이 제한 + 디코딩 에러 처리)
                 if (urlParams.has("additional_context") && additionalContextInput) {
                     const contextValue = urlParams.get("additional_context");
                     if (contextValue) {
-                        additionalContextInput.value = decodeURIComponent(contextValue);
+                        try {
+                            const decodedValue = decodeURIComponent(contextValue);
+                            if (decodedValue.length <= MAX_ADDITIONAL_CONTEXT_LENGTH) {
+                                additionalContextInput.value = decodedValue;
+                            }
+                        } catch (e) {
+                            // 잘못된 인코딩 처리 - 무시
+                            console.warn("Invalid URL encoding for additional_context:", e);
+                        }
                     }
                 }
                 
+                // use_gemini 처리 (강화된 파싱)
                 if (urlParams.has("use_gemini") && useGeminiCheckbox) {
-                    useGeminiCheckbox.checked = urlParams.get("use_gemini") === "on" || urlParams.get("use_gemini") === "true";
+                    const geminiValue = urlParams.get("use_gemini");
+                    if (geminiValue) {
+                        const normalizedValue = geminiValue.toLowerCase().trim();
+                        useGeminiCheckbox.checked = normalizedValue === "true" || 
+                                                    normalizedValue === "1" || 
+                                                    normalizedValue === "on";
+                    }
                 }
             });
             
@@ -1033,11 +1115,11 @@ async def root():
                         resultText += `**분석 대상**: ${targetKeyword}\\n`;
                         resultText += `**분석 유형**: ${typeNames[targetType] || targetType} 분석\\n`;
                         resultText += `**분석 기간**: ${formData.start_date} ~ ${formData.end_date}\\n`;
-                        resultText += `**분석 일시**: ${new Date().toLocaleString('ko-KR')}\\n\\n`;
+                        resultText += "**분석 일시**: " + new Date().toLocaleString("ko-KR") + "\\n\\n";
                         resultText += `---\\n\\n`;
                         
                         // 오디언스 분석인 경우 특별한 포맷팅 (MECE 구조 지원)
-                        if (targetType === 'audience' && analysisData) {
+                        if (targetType === "audience" && analysisData) {
                             // Executive Summary (중복 제거)
                             let executiveSummary = null;
                             if (analysisData.executive_summary) {
@@ -1094,12 +1176,12 @@ async def root():
                                     resultText += `\\n`;
                                 }
                                 // primary_insights가 문자열인 경우
-                                else if (keyFindings.primary_insights && typeof keyFindings.primary_insights === 'string') {
+                                else if (keyFindings.primary_insights && typeof keyFindings.primary_insights === "string") {
                                     resultText += `### 핵심 인사이트\\n\\n${keyFindings.primary_insights}\\n\\n`;
                                 }
                                 
                                 // quantitative_metrics
-                                if (keyFindings.quantitative_metrics && typeof keyFindings.quantitative_metrics === 'object') {
+                                if (keyFindings.quantitative_metrics && typeof keyFindings.quantitative_metrics === "object") {
                                     resultText += `### 정량적 지표\\n\\n`;
                                     const metrics = keyFindings.quantitative_metrics;
                                     // 모든 메트릭 필드를 동적으로 표시
@@ -1122,13 +1204,13 @@ async def root():
                                 
                                 // keyFindings의 다른 필드들도 표시
                                 Object.keys(keyFindings).forEach(key => {
-                                    if (key !== 'primary_insights' && key !== 'quantitative_metrics' && keyFindings[key]) {
+                                    if (key !== "primary_insights" && key !== "quantitative_metrics" && keyFindings[key]) {
                                         resultText += `### ${key}\\n\\n`;
                                         if (Array.isArray(keyFindings[key])) {
                                             keyFindings[key].forEach((item, idx) => {
                                                 resultText += `${idx + 1}. ${item}\\n`;
                                             });
-                                        } else if (typeof keyFindings[key] === 'object') {
+                                        } else if (typeof keyFindings[key] === "object") {
                                             resultText += JSON.stringify(keyFindings[key], null, 2) + `\\n`;
                                         } else {
                                             resultText += `${keyFindings[key]}\\n`;
@@ -1154,7 +1236,7 @@ async def root():
                             const insights = detailedAnalysis?.insights || analysisData.insights;
                             
                             // detailed_analysis가 직접 객체인 경우
-                            if (detailedAnalysis && typeof detailedAnalysis === 'object') {
+                            if (detailedAnalysis && typeof detailedAnalysis === "object") {
                                 resultText += `## 💡 상세 분석 (Detailed Analysis)\\n\\n`;
                                 
                                 // insights가 있는 경우
@@ -1162,7 +1244,7 @@ async def root():
                                     if (insights.demographics) {
                                         resultText += `### 인구통계학적 특성\\n\\n`;
                                         const demo = insights.demographics;
-                                        if (typeof demo === 'object') {
+                                        if (typeof demo === "object") {
                                             if (demo.age_range) resultText += `- **연령대**: ${demo.age_range}\\n`;
                                             if (demo.gender) resultText += `- **성별**: ${demo.gender}\\n`;
                                             if (demo.location) resultText += `- **지역**: ${demo.location}\\n`;
@@ -1184,7 +1266,7 @@ async def root():
                                     if (insights.psychographics) {
                                         resultText += `### 심리적 특성\\n\\n`;
                                         const psycho = insights.psychographics;
-                                        if (typeof psycho === 'object') {
+                                        if (typeof psycho === "object") {
                                             if (psycho.lifestyle) resultText += `- **라이프스타일**: ${psycho.lifestyle}\\n`;
                                             if (psycho.values) resultText += `- **가치관**: ${psycho.values}\\n`;
                                             if (psycho.interests) resultText += `- **관심사**: ${psycho.interests}\\n`;
@@ -1200,7 +1282,7 @@ async def root():
                                     if (insights.behavior) {
                                         resultText += `### 행동 패턴\\n\\n`;
                                         const behavior = insights.behavior;
-                                        if (typeof behavior === 'object') {
+                                        if (typeof behavior === "object") {
                                             if (behavior.purchase_behavior) resultText += `- **구매 행동**: ${behavior.purchase_behavior}\\n`;
                                             if (behavior.media_consumption) resultText += `- **미디어 소비**: ${behavior.media_consumption}\\n`;
                                             if (behavior.online_activity) resultText += `- **온라인 활동**: ${behavior.online_activity}\\n`;
@@ -1237,16 +1319,16 @@ async def root():
                                     }
                                 }
                                 // insights가 없지만 detailed_analysis가 문자열인 경우
-                                else if (typeof detailedAnalysis === 'string') {
+                                else if (typeof detailedAnalysis === "string") {
                                     resultText += detailedAnalysis + `\\n\\n`;
                                 }
                                 // detailed_analysis가 객체이지만 insights가 없는 경우
-                                else if (typeof detailedAnalysis === 'object') {
+                                else if (typeof detailedAnalysis === "object") {
                                     // detailed_analysis의 모든 필드를 표시
                                     Object.keys(detailedAnalysis).forEach(key => {
-                                        if (key !== 'insights' && detailedAnalysis[key]) {
+                                        if (key !== "insights" && detailedAnalysis[key]) {
                                             resultText += `### ${key}\\n\\n`;
-                                            if (typeof detailedAnalysis[key] === 'object' && !Array.isArray(detailedAnalysis[key])) {
+                                            if (typeof detailedAnalysis[key] === "object" && !Array.isArray(detailedAnalysis[key])) {
                                                 Object.keys(detailedAnalysis[key]).forEach(subKey => {
                                                     resultText += `- **${subKey}**: ${JSON.stringify(detailedAnalysis[key][subKey])}\\n`;
                                                 });
@@ -1263,13 +1345,13 @@ async def root():
                                 }
                             }
                             // detailed_analysis가 없지만 insights가 직접 있는 경우
-                            else if (insights && typeof insights === 'object') {
+                            else if (insights && typeof insights === "object") {
                                 resultText += `## 💡 상세 분석 (Detailed Analysis)\\n\\n`;
                                 
                                 if (insights.demographics) {
                                     resultText += `### 인구통계학적 특성\\n\\n`;
                                     const demo = insights.demographics;
-                                    if (typeof demo === 'object') {
+                                    if (typeof demo === "object") {
                                         Object.keys(demo).forEach(key => {
                                             if (demo[key]) {
                                                 if (Array.isArray(demo[key])) {
@@ -1288,7 +1370,7 @@ async def root():
                                 if (insights.psychographics) {
                                     resultText += `### 심리적 특성\\n\\n`;
                                     const psycho = insights.psychographics;
-                                    if (typeof psycho === 'object') {
+                                    if (typeof psycho === "object") {
                                         Object.keys(psycho).forEach(key => {
                                             if (psycho[key]) {
                                                 if (Array.isArray(psycho[key])) {
@@ -1307,7 +1389,7 @@ async def root():
                                 if (insights.behavior) {
                                     resultText += `### 행동 패턴\\n\\n`;
                                     const behavior = insights.behavior;
-                                    if (typeof behavior === 'object') {
+                                    if (typeof behavior === "object") {
                                         Object.keys(behavior).forEach(key => {
                                             if (behavior[key]) {
                                                 if (Array.isArray(behavior[key])) {
@@ -1376,7 +1458,7 @@ async def root():
                                 if (metrics.accessibility) resultText += `- **접근 난이도**: ${metrics.accessibility}\\n`;
                                 resultText += `\\n`;
                             }
-                        } else if (targetType === 'keyword' && analysisData) {
+                        } else if (targetType === "keyword" && analysisData) {
                             // 키워드 분석 상세 포맷팅 (MECE 구조 지원)
                             
                             // Executive Summary
@@ -1575,7 +1657,7 @@ async def root():
                                 });
                                 resultText += `\\n`;
                             }
-                        } else if (targetType === 'comprehensive' && analysisData) {
+                        } else if (targetType === "comprehensive" && analysisData) {
                             // 종합 분석 상세 포맷팅 (키워드 + 오디언스 통합)
                             
                             // Executive Summary
@@ -1824,7 +1906,7 @@ async def root():
                         const analysisSources = analysisData?.analysis_sources || data.data?.analysis_sources;
                         
                         // Sentiment 분석
-                        if (sentimentData && typeof sentimentData === 'object') {
+                        if (sentimentData && typeof sentimentData === "object") {
                             resultText += `## 😊 감정 분석 (Sentiment Analysis)\\n\\n`;
                             const sentiment = sentimentData;
                             if (sentiment.overall_sentiment) resultText += `- **전체 감정**: ${sentiment.overall_sentiment}\\n`;
@@ -1858,7 +1940,7 @@ async def root():
                         }
                         
                         // Context 분석
-                        if (contextData && typeof contextData === 'object') {
+                        if (contextData && typeof contextData === "object") {
                             resultText += `## 🌐 맥락 분석 (Context Analysis)\\n\\n`;
                             const context = contextData;
                             if (context.industry_context) resultText += `- **산업 맥락**: ${context.industry_context}\\n`;
@@ -1877,7 +1959,7 @@ async def root():
                                 if (!['industry_context', 'market_context', 'social_context', 'cultural_context', 'temporal_context', 'related_events'].includes(key) && context[key]) {
                                     if (Array.isArray(context[key])) {
                                         resultText += `- **${key}**: ${context[key].join(', ')}\\n`;
-                                    } else if (typeof context[key] === 'object') {
+                                    } else if (typeof context[key] === "object") {
                                         resultText += `- **${key}**: ${JSON.stringify(context[key])}\\n`;
                                     } else {
                                         resultText += `- **${key}**: ${context[key]}\\n`;
@@ -1888,7 +1970,7 @@ async def root():
                         }
                         
                         // Tone 분석
-                        if (toneData && typeof toneData === 'object') {
+                        if (toneData && typeof toneData === "object") {
                             resultText += `## 🎭 톤 분석 (Tone Analysis)\\n\\n`;
                             const tone = toneData;
                             if (tone.overall_tone) resultText += `- **전체 톤**: ${tone.overall_tone}\\n`;
@@ -1916,14 +1998,14 @@ async def root():
                         
                         // Recommendations (키워드 추천 등) - strategic_recommendations와 중복되지 않도록 확인
                         if (recommendationsData && !analysisData?.strategic_recommendations) {
-                            if (typeof recommendationsData === 'object' && !Array.isArray(recommendationsData)) {
+                            if (typeof recommendationsData === "object" && !Array.isArray(recommendationsData)) {
                                 resultText += `## 💡 키워드 추천 (Keyword Recommendations)\\n\\n`;
                                 const recs = recommendationsData;
                                 
                                 if (recs.semantic_keywords && Array.isArray(recs.semantic_keywords) && recs.semantic_keywords.length > 0) {
                                     resultText += `### 의미적 관련 키워드\\n\\n`;
                                     recs.semantic_keywords.forEach((kw, idx) => {
-                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        const keyword = typeof kw === "string" ? kw : (kw.keyword || kw);
                                         const score = kw.score ? ' (점수: ' + kw.score + ')' : '';
                                         resultText += (idx + 1) + '. ' + keyword + score + '\\n';
                                     });
@@ -1933,7 +2015,7 @@ async def root():
                                 if (recs.co_occurring_keywords && Array.isArray(recs.co_occurring_keywords) && recs.co_occurring_keywords.length > 0) {
                                     resultText += '### 공기 키워드\\n\\n';
                                     recs.co_occurring_keywords.forEach((kw, idx) => {
-                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        const keyword = typeof kw === "string" ? kw : (kw.keyword || kw);
                                         resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
                                     resultText += '\\n';
@@ -1942,7 +2024,7 @@ async def root():
                                 if (recs.long_tail_keywords && Array.isArray(recs.long_tail_keywords) && recs.long_tail_keywords.length > 0) {
                                     resultText += '### 롱테일 키워드\\n\\n';
                                     recs.long_tail_keywords.forEach((kw, idx) => {
-                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        const keyword = typeof kw === "string" ? kw : (kw.keyword || kw);
                                         resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
                                     resultText += '\\n';
@@ -1951,7 +2033,7 @@ async def root():
                                 if (recs.trending_keywords && Array.isArray(recs.trending_keywords) && recs.trending_keywords.length > 0) {
                                     resultText += '### 트렌딩 키워드\\n\\n';
                                     recs.trending_keywords.forEach((kw, idx) => {
-                                        const keyword = typeof kw === 'string' ? kw : (kw.keyword || kw);
+                                        const keyword = typeof kw === "string" ? kw : (kw.keyword || kw);
                                         resultText += (idx + 1) + '. ' + keyword + '\\n';
                                     });
                                     resultText += '\\n';
@@ -1963,7 +2045,7 @@ async def root():
                                         if (Array.isArray(recs[key]) && recs[key].length > 0) {
                                             resultText += '### ' + key + '\\n\\n';
                                             recs[key].forEach((item, idx) => {
-                                                const keyword = typeof item === 'string' ? item : (item.keyword || item);
+                                                const keyword = typeof item === "string" ? item : (item.keyword || item);
                                                 resultText += (idx + 1) + '. ' + keyword + '\\n';
                                             });
                                             resultText += '\\n';
@@ -1973,7 +2055,7 @@ async def root():
                             } else if (Array.isArray(recommendationsData) && recommendationsData.length > 0) {
                                 resultText += `## 💡 키워드 추천\\n\\n`;
                                 recommendationsData.forEach((rec, idx) => {
-                                    const keyword = typeof rec === 'string' ? rec : (rec.keyword || rec);
+                                    const keyword = typeof rec === "string" ? rec : (rec.keyword || rec);
                                     resultText += `${idx + 1}. ${keyword}\\n`;
                                 });
                                 resultText += `\\n`;
@@ -1990,7 +2072,7 @@ async def root():
                         }
                         
                         // 결과가 비어있는 경우 처리
-                        const baseReportText = `# 타겟 분석 보고서\\n\\n**분석 대상**: ${targetKeyword}\\n**분석 유형**: ${typeNames[targetType] || targetType} 분석\\n**분석 기간**: ${formData.start_date} ~ ${formData.end_date}\\n**분석 일시**: ${new Date().toLocaleString('ko-KR')}\\n\\n---\\n\\n`;
+                        const baseReportText = "# 타겟 분석 보고서\\n\\n**분석 대상**: " + targetKeyword + "\\n**분석 유형**: " + (typeNames[targetType] || targetType) + " 분석\\n**분석 기간**: " + formData.start_date + " ~ " + formData.end_date + "\\n**분석 일시**: " + new Date().toLocaleString("ko-KR") + "\\n\\n---\\n\\n";
                         const currentText = resultText.trim();
                         const baseText = baseReportText.trim();
                         
