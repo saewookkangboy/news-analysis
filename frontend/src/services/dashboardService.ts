@@ -3,6 +3,8 @@
  * 백엔드 API와 통신하는 서비스
  */
 
+import { ApiResponse, ApiCallOptions } from '../types/api';
+
 // API 기본 URL 설정 (배포 환경 자동 감지)
 const getApiBaseUrl = (): string => {
   // 배포 환경에서는 상대 경로 사용 (같은 도메인)
@@ -25,66 +27,85 @@ if (typeof window !== 'undefined') {
   console.log('API Base URL:', API_BASE_URL);
 }
 
-// 공통 응답 타입
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-// API 호출 헬퍼 함수
+// API 호출 헬퍼 함수 (타임아웃 및 재시도 로직 포함)
 async function apiCall<T>(
-  endpoint: string,
-  options: RequestInit = {}
+    endpoint: string,
+    options: ApiCallOptions = {},
+    retries: number = options.retries ?? 3
 ): Promise<ApiResponse<T>> {
+  const timeout = options.timeout ?? 30000; // 기본 30초 타임아웃
+  const retryDelay = options.retryDelay ?? 1000; // 기본 1초 재시도 지연
+  
   try {
     const url = `${API_BASE_URL}${endpoint}`;
     
     console.log(`[API Call] ${options.method || 'GET'} ${url}`);
     
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      // CORS 설정
-      credentials: 'same-origin',
-    });
+    // AbortController를 사용한 타임아웃 처리
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        // CORS 설정
+        credentials: 'same-origin',
+      });
 
-    console.log(`[API Response] ${response.status} ${response.statusText}`);
+      clearTimeout(timeoutId);
+      console.log(`[API Response] ${response.status} ${response.statusText}`);
 
-    if (!response.ok) {
-      let errorData: any = {};
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { message: await response.text() };
+      if (!response.ok) {
+        let errorData: any = {};
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { message: await response.text() };
+        }
+        
+        const errorMessage = errorData.detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        console.error(`[API Error] ${endpoint}:`, errorMessage);
+        
+        return {
+          success: false,
+          error: errorMessage,
+        };
+      }
+
+      const data = await response.json();
+      console.log(`[API Success] ${endpoint}:`, data);
+      
+      // FastAPI 응답 형식에 맞춰 처리
+      if (data.success !== undefined) {
+        return data as ApiResponse<T>;
       }
       
-      const errorMessage = errorData.detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
-      console.error(`[API Error] ${endpoint}:`, errorMessage);
-      
+      // 직접 데이터를 반환하는 경우
       return {
-        success: false,
-        error: errorMessage,
+        success: true,
+        data: data as T,
       };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      // 네트워크 오류 또는 타임아웃인 경우 재시도
+      if (retries > 0 && (
+        fetchError instanceof TypeError || 
+        fetchError instanceof DOMException ||
+        (fetchError as any)?.name === 'AbortError'
+      )) {
+        console.warn(`[API] 재시도 중... (남은 횟수: ${retries - 1})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (4 - retries)));
+        return apiCall<T>(endpoint, options, retries - 1);
+      }
+      
+      throw fetchError;
     }
-
-    const data = await response.json();
-    console.log(`[API Success] ${endpoint}:`, data);
-    
-    // FastAPI 응답 형식에 맞춰 처리
-    if (data.success !== undefined) {
-      return data as ApiResponse<T>;
-    }
-    
-    // 직접 데이터를 반환하는 경우
-    return {
-      success: true,
-      data: data as T,
-    };
   } catch (error) {
     console.error(`[API Exception] ${endpoint}:`, error);
     const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
@@ -94,6 +115,14 @@ async function apiCall<T>(
       return {
         success: false,
         error: '네트워크 연결을 확인해주세요. API 서버에 연결할 수 없습니다.',
+      };
+    }
+    
+    // 타임아웃 오류
+    if (error instanceof DOMException || (error as any)?.name === 'AbortError') {
+      return {
+        success: false,
+        error: '요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.',
       };
     }
     
@@ -112,6 +141,15 @@ export interface DashboardOverview {
   total_users: number;
   conversion_rate: number;
   revenue?: number;
+  total_sessions?: number;
+  total_conversions?: number;
+  average_conversion_rate?: number;
+  total_revenue?: number;
+  average_order_value?: number;
+  total_leads?: number;
+  lead_conversion_rate?: number;
+  total_page_views?: number;
+  unique_visitors?: number;
 }
 
 export interface FunnelData {

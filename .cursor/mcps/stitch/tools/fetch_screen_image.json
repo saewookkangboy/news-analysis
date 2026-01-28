@@ -1,0 +1,18 @@
+{
+  "name": "fetch_screen_image",
+  "description": "Downloads the high-res screenshot of a screen.",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "screen_id": {
+        "type": "string",
+        "description": "The ID of the screen to fetch image from"
+      },
+      "project_id": {
+        "type": "string",
+        "description": "The ID of the project containing the screen"
+      }
+    },
+    "required": ["screen_id", "project_id"]
+  }
+}

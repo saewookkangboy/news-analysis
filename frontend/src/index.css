@@ -339,6 +339,19 @@ code {
 .form-input:focus {
   transform: translateY(-1px);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  outline: 2px solid #000000;
+  outline-offset: 2px;
+}
+
+/* 접근성: 키보드 포커스 스타일 */
+*:focus-visible {
+  outline: 2px solid #000000;
+  outline-offset: 2px;
+}
+
+/* 접근성: 스킵 링크 */
+.skip-link {
+  @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-black focus:text-white focus:rounded-lg;
 }
 
 .form-label {

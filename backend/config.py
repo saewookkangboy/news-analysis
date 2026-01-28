@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FILE: Optional[str] = None  # None이면 파일 로깅 비활성화
     
+    # AI 프롬프트 및 토큰 설정
+    PROMPT_MAX_LENGTH: int = 4000  # 프롬프트 최대 길이 (문자)
+    MAX_OUTPUT_TOKENS: int = 3000  # 최대 출력 토큰 수
+    CACHE_TTL_FRONTEND: int = 30000  # 프론트엔드 캐시 TTL (밀리초)
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -99,23 +104,12 @@ config_logger = logging.getLogger(__name__)
 openai_env = os.getenv("OPENAI_API_KEY")
 gemini_env = os.getenv("GEMINI_API_KEY")
 
+# 보안 강화: API 키 값은 로깅하지 않음 (상태만 확인)
 config_logger.info("=" * 60)
 config_logger.info("환경 변수 로딩 상태 확인")
 config_logger.info(f"환경: {'Vercel (배포)' if IS_VERCEL else '로컬 개발'}")
-config_logger.info(f"os.getenv('OPENAI_API_KEY'): {'✅ 설정됨' if openai_env else '❌ 미설정'}")
-config_logger.info(f"os.getenv('GEMINI_API_KEY'): {'✅ 설정됨' if gemini_env else '❌ 미설정'}")
-config_logger.info(f"settings.OPENAI_API_KEY: {'✅ 설정됨' if settings.OPENAI_API_KEY else '❌ 미설정'}")
-if settings.OPENAI_API_KEY:
-    config_logger.info(f"  - 길이: {len(settings.OPENAI_API_KEY)} 문자")
-    config_logger.info(f"  - 시작: {settings.OPENAI_API_KEY[:10]}...")
-    if openai_env:
-        config_logger.info(f"  - 환경 변수와 일치: {settings.OPENAI_API_KEY == openai_env}")
-config_logger.info(f"settings.GEMINI_API_KEY: {'✅ 설정됨' if settings.GEMINI_API_KEY else '❌ 미설정'}")
-if settings.GEMINI_API_KEY:
-    config_logger.info(f"  - 길이: {len(settings.GEMINI_API_KEY)} 문자")
-    config_logger.info(f"  - 시작: {settings.GEMINI_API_KEY[:10]}...")
-    if gemini_env:
-        config_logger.info(f"  - 환경 변수와 일치: {settings.GEMINI_API_KEY == gemini_env}")
+config_logger.info(f"OPENAI_API_KEY: {'✅ 설정됨' if (openai_env or settings.OPENAI_API_KEY) else '❌ 미설정'}")
+config_logger.info(f"GEMINI_API_KEY: {'✅ 설정됨' if (gemini_env or settings.GEMINI_API_KEY) else '❌ 미설정'}")
 config_logger.info(f"OPENAI_MODEL: {settings.OPENAI_MODEL}")
 config_logger.info(f"GEMINI_MODEL: {settings.GEMINI_MODEL}")
 config_logger.info("=" * 60)

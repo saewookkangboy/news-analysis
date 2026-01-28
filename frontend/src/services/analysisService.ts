@@ -2,6 +2,9 @@
  * Analysis API Service
  * 실제 백엔드 분석 API와 통신하는 서비스
  */
+import { normalizeAnalysisResult } from '../utils/analysisNormalizer';
+import type { TargetAnalysisResult, NormalizedAnalysisResult } from '../types/analysis';
+import { ApiResponse, ApiCallOptions } from '../types/api';
 
 // API 기본 URL 설정 (배포 환경 자동 감지)
 const getApiBaseUrl = (): string => {
@@ -19,67 +22,85 @@ const getApiBaseUrl = (): string => {
 
 const API_BASE_URL = getApiBaseUrl();
 
-// 공통 응답 타입
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  detail?: string;
-  message?: string;
-}
-
-// API 호출 헬퍼 함수
+// API 호출 헬퍼 함수 (타임아웃 및 재시도 로직 포함)
 async function apiCall<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiCallOptions = {},
+  retries: number = options.retries ?? 3
 ): Promise<ApiResponse<T>> {
+  const timeout = options.timeout ?? 30000; // 기본 30초 타임아웃
+  const retryDelay = options.retryDelay ?? 1000; // 기본 1초 재시도 지연
+  
   try {
     const url = `${API_BASE_URL}${endpoint}`;
     
     console.log(`[Analysis API] ${options.method || 'GET'} ${url}`);
     
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      credentials: 'same-origin',
-    });
+    // AbortController를 사용한 타임아웃 처리
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        credentials: 'same-origin',
+      });
 
-    console.log(`[Analysis API Response] ${response.status} ${response.statusText}`);
+      clearTimeout(timeoutId);
+      console.log(`[Analysis API Response] ${response.status} ${response.statusText}`);
 
-    if (!response.ok) {
-      let errorData: any = {};
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { message: await response.text() };
+      if (!response.ok) {
+        let errorData: any = {};
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { message: await response.text() };
+        }
+        
+        const errorMessage = errorData.detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        console.error(`[Analysis API Error] ${endpoint}:`, errorMessage);
+        
+        return {
+          success: false,
+          error: errorMessage,
+          detail: errorMessage,
+        };
+      }
+
+      const data = await response.json();
+      console.log(`[Analysis API Success] ${endpoint}:`, data);
+      
+      // FastAPI 응답 형식에 맞춰 처리
+      if (data.success !== undefined) {
+        return data as ApiResponse<T>;
       }
       
-      const errorMessage = errorData.detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
-      console.error(`[Analysis API Error] ${endpoint}:`, errorMessage);
-      
+      // 직접 데이터를 반환하는 경우
       return {
-        success: false,
-        error: errorMessage,
-        detail: errorMessage,
+        success: true,
+        data: data as T,
       };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      // 네트워크 오류 또는 타임아웃인 경우 재시도
+      if (retries > 0 && (
+        fetchError instanceof TypeError || 
+        fetchError instanceof DOMException ||
+        (fetchError as any)?.name === 'AbortError'
+      )) {
+        console.warn(`[Analysis API] 재시도 중... (남은 횟수: ${retries - 1})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (4 - retries)));
+        return apiCall<T>(endpoint, options, retries - 1);
+      }
+      
+      throw fetchError;
     }
-
-    const data = await response.json();
-    console.log(`[Analysis API Success] ${endpoint}:`, data);
-    
-    // FastAPI 응답 형식에 맞춰 처리
-    if (data.success !== undefined) {
-      return data as ApiResponse<T>;
-    }
-    
-    // 직접 데이터를 반환하는 경우
-    return {
-      success: true,
-      data: data as T,
-    };
   } catch (error) {
     console.error(`[Analysis API Exception] ${endpoint}:`, error);
     const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
@@ -93,6 +114,15 @@ async function apiCall<T>(
       };
     }
     
+    // 타임아웃 오류
+    if (error instanceof DOMException || (error as any)?.name === 'AbortError') {
+      return {
+        success: false,
+        error: '요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.',
+        detail: '요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.',
+      };
+    }
+    
     return {
       success: false,
       error: errorMessage,
@@ -101,28 +131,12 @@ async function apiCall<T>(
   }
 }
 
-// 분석 결과 타입
-export interface TargetAnalysisResult {
-  target_keyword: string;
-  target_type: string;
-  analysis: {
-    overview?: any;
-    insights?: any;
-    recommendations?: any;
-  };
-  sentiment?: any;
-  context?: any;
-  tone?: any;
-  recommendations?: any;
-  progress_info?: {
-    current_step?: string;
-    progress?: number;
-  };
-}
+// 분석 결과 타입은 ../types/analysis.ts에서 import
+export type { TargetAnalysisResult, NormalizedAnalysisResult } from '../types/analysis';
 
 export interface AnalysisRequest {
   target_keyword: string;
-  target_type?: 'keyword' | 'audience' | 'competitor';
+  target_type?: 'keyword' | 'audience' | 'comprehensive';
   additional_context?: string;
   use_gemini?: boolean;
   start_date?: string;
@@ -140,11 +154,21 @@ export class AnalysisService {
    */
   static async analyzeTarget(
     request: AnalysisRequest
-  ): Promise<ApiResponse<TargetAnalysisResult>> {
-    return apiCall<TargetAnalysisResult>('/target/analyze', {
+  ): Promise<ApiResponse<NormalizedAnalysisResult>> {
+    const response = await apiCall<TargetAnalysisResult>('/target/analyze', {
       method: 'POST',
       body: JSON.stringify(request),
     });
+    
+    // 결과 정규화
+    if (response.success && response.data) {
+      return {
+        ...response,
+        data: normalizeAnalysisResult(response.data) as NormalizedAnalysisResult,
+      };
+    }
+    
+    return response as ApiResponse<NormalizedAnalysisResult>;
   }
 
   /**
@@ -155,7 +179,7 @@ export class AnalysisService {
     target_type: string = 'keyword',
     additional_context?: string,
     use_gemini: boolean = false
-  ): Promise<ApiResponse<TargetAnalysisResult>> {
+  ): Promise<ApiResponse<NormalizedAnalysisResult>> {
     const params = new URLSearchParams({
       target_keyword,
       target_type,
@@ -165,7 +189,17 @@ export class AnalysisService {
       params.append('additional_context', additional_context);
     }
     
-    return apiCall<TargetAnalysisResult>(`/target/analyze?${params.toString()}`);
+    const response = await apiCall<TargetAnalysisResult>(`/target/analyze?${params.toString()}`);
+    
+    // 결과 정규화
+    if (response.success && response.data) {
+      return {
+        ...response,
+        data: normalizeAnalysisResult(response.data) as NormalizedAnalysisResult,
+      };
+    }
+    
+    return response as ApiResponse<NormalizedAnalysisResult>;
   }
 
   /**
@@ -177,8 +211,8 @@ export class AnalysisService {
     additional_context?: string,
     use_gemini: boolean = false,
     analysis_depth: string = 'standard'
-  ): Promise<ApiResponse<TargetAnalysisResult>> {
-    return apiCall<TargetAnalysisResult>('/analysis/comprehensive', {
+  ): Promise<ApiResponse<NormalizedAnalysisResult>> {
+    const response = await apiCall<TargetAnalysisResult>('/analysis/comprehensive', {
       method: 'POST',
       body: JSON.stringify({
         target_keyword,
@@ -188,6 +222,16 @@ export class AnalysisService {
         analysis_depth,
       }),
     });
+    
+    // 결과 정규화
+    if (response.success && response.data) {
+      return {
+        ...response,
+        data: normalizeAnalysisResult(response.data) as NormalizedAnalysisResult,
+      };
+    }
+    
+    return response as ApiResponse<NormalizedAnalysisResult>;
   }
 
   /**
@@ -197,7 +241,7 @@ export class AnalysisService {
     request: AnalysisRequest,
     onSentence: (sentence: string, section: string) => void,
     onProgress?: (progress: number, message: string) => void,
-    onComplete?: (data: TargetAnalysisResult) => void,
+    onComplete?: (data: NormalizedAnalysisResult) => void,
     onError?: (error: string) => void
   ): Promise<void> {
     try {
@@ -274,7 +318,9 @@ export class AnalysisService {
             // 완료 처리
             else if (chunk.type === 'complete') {
               if (onComplete && chunk.data) {
-                onComplete(chunk.data);
+                // 결과 정규화 후 콜백 호출
+                const normalized = normalizeAnalysisResult(chunk.data) as NormalizedAnalysisResult;
+                onComplete(normalized);
               }
               return;
             }
@@ -298,7 +344,9 @@ export class AnalysisService {
           if (chunk.type === 'sentence') {
             onSentence(chunk.content, chunk.section || 'executive_summary');
           } else if (chunk.type === 'complete' && onComplete && chunk.data) {
-            onComplete(chunk.data);
+            // 결과 정규화 후 콜백 호출
+            const normalized = normalizeAnalysisResult(chunk.data) as NormalizedAnalysisResult;
+            onComplete(normalized);
           }
         } catch (parseError) {
           console.warn(`[Analysis API Stream] 버퍼 파싱 실패:`, buffer, parseError);

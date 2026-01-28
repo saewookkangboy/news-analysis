@@ -1,0 +1,14 @@
+{
+  "name": "list_screens",
+  "description": "Lists all screens within a specific project.",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "project_id": {
+        "type": "string",
+        "description": "The ID of the project to list screens from"
+      }
+    },
+    "required": ["project_id"]
+  }
+}

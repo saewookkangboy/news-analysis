@@ -1,0 +1,14 @@
+{
+  "name": "get_project",
+  "description": "Retrieves details of a specific project.",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "project_id": {
+        "type": "string",
+        "description": "The ID of the project to retrieve"
+      }
+    },
+    "required": ["project_id"]
+  }
+}

@@ -26,6 +26,7 @@ google-genai>=0.2.0  # 새로운 Gemini API 클라이언트 (선택사항)
 python-dotenv==1.0.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
+psutil==5.9.6  # 시스템 모니터링 (선택적)
 
 # Development (optional for Vercel)
 pytest==7.4.3

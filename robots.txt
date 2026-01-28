@@ -1,0 +1,9 @@
+# robots.txt for News Trend Analyzer
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /docs
+Disallow: /openapi.json
+
+# Sitemap
+Sitemap: https://news-trend-analyzer.vercel.app/sitemap.xml

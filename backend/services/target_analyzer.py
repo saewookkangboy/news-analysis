@@ -9,16 +9,26 @@ from typing import Optional, Dict, Any, AsyncGenerator
 import json
 
 from backend.config import settings
+
+# Vercel 환경 확인
+IS_VERCEL = os.environ.get("VERCEL") == "1"
 from backend.services.progress_tracker import ProgressTracker
 from backend.utils.token_optimizer import (
     optimize_prompt, estimate_tokens, get_max_tokens_for_model, optimize_additional_context,
     extract_and_fix_json, parse_json_with_fallback
 )
+from backend.utils.result_normalizer import normalize_analysis_result, ensure_result_structure
 from backend.utils.gemini_utils import (
     generate_content_with_fallback,
     generate_content_stream_with_fallback,
     build_model_candidates,
     is_model_not_found_error,
+)
+from backend.utils.security import (
+    get_api_key_safely,
+    check_api_keys_status,
+    log_api_key_status_safely,
+    validate_api_key
 )
 
 logger = logging.getLogger(__name__)
@@ -51,37 +61,18 @@ async def analyze_target(
     try:
         logger.info(f"타겟 분석 시작: {target_keyword} (타입: {target_type}, Gemini 보완: {use_gemini})")
         
-        # API 키 상태 확인 및 로깅 (환경 변수에서 직접 확인 - Vercel 호환성)
-        # 여러 소스에서 API 키 확인 (우선순위: 환경 변수 > Settings)
-        openai_env = os.getenv('OPENAI_API_KEY')
-        gemini_env = os.getenv('GEMINI_API_KEY')
-        openai_settings = getattr(settings, 'OPENAI_API_KEY', None)
-        gemini_settings = getattr(settings, 'GEMINI_API_KEY', None)
+        # API 키 상태 확인 (보안 강화: 키 값은 로깅하지 않음)
+        openai_key = get_api_key_safely('OPENAI_API_KEY')
+        gemini_key = get_api_key_safely('GEMINI_API_KEY')
         
-        openai_key = openai_env or openai_settings
-        gemini_key = gemini_env or gemini_settings
+        has_openai_key = bool(openai_key)
+        has_gemini_key = bool(gemini_key)
         
-        has_openai_key = bool(openai_key and len(openai_key.strip()) > 0)
-        has_gemini_key = bool(gemini_key and len(gemini_key.strip()) > 0)
-        
-        # 상세 로깅
+        # 안전한 로깅 (키 값은 노출하지 않음)
         logger.info("=" * 60)
-        logger.info("API 키 상태 확인 (상세)")
-        logger.info(f"os.getenv('OPENAI_API_KEY'): {'✅ 설정됨' if openai_env else '❌ 미설정'}")
-        if openai_env:
-            logger.info(f"  - 길이: {len(openai_env)} 문자, 시작: {openai_env[:10]}...")
-        logger.info(f"settings.OPENAI_API_KEY: {'✅ 설정됨' if openai_settings else '❌ 미설정'}")
-        if openai_settings:
-            logger.info(f"  - 길이: {len(openai_settings)} 문자, 시작: {openai_settings[:10]}...")
-        logger.info(f"최종 openai_key: {'✅ 설정됨' if has_openai_key else '❌ 미설정'}")
-        
-        logger.info(f"os.getenv('GEMINI_API_KEY'): {'✅ 설정됨' if gemini_env else '❌ 미설정'}")
-        if gemini_env:
-            logger.info(f"  - 길이: {len(gemini_env)} 문자, 시작: {gemini_env[:10]}...")
-        logger.info(f"settings.GEMINI_API_KEY: {'✅ 설정됨' if gemini_settings else '❌ 미설정'}")
-        if gemini_settings:
-            logger.info(f"  - 길이: {len(gemini_settings)} 문자, 시작: {gemini_settings[:10]}...")
-        logger.info(f"최종 gemini_key: {'✅ 설정됨' if has_gemini_key else '❌ 미설정'}")
+        logger.info("API 키 상태 확인")
+        log_api_key_status_safely('OPENAI_API_KEY', has_openai_key)
+        log_api_key_status_safely('GEMINI_API_KEY', has_gemini_key)
         logger.info("=" * 60)
         
         if not has_openai_key and not has_gemini_key:
@@ -95,19 +86,26 @@ async def analyze_target(
         if has_openai_key:
             if progress_tracker:
                 await progress_tracker.update(10, "OpenAI API로 기본 분석 시작...")
-            logger.info("=" * 60)
-            logger.info("🚀 OpenAI API 호출 시작")
-            logger.info(f"API 키 확인: ✅ (길이: {len(openai_key)} 문자)")
-            logger.info(f"모델: {settings.OPENAI_MODEL}")
-            logger.info("=" * 60)
+            # 디버그 모드에서만 상세 로깅
+            if settings.LOG_LEVEL == "DEBUG":
+                logger.debug("=" * 60)
+                logger.debug("🚀 OpenAI API 호출 시작")
+                logger.debug(f"API 키: ✅ 설정됨")
+                logger.debug(f"모델: {settings.OPENAI_MODEL}")
+                logger.debug("=" * 60)
+            else:
+                logger.info("OpenAI API 호출 시작")
             try:
                 result = await _analyze_with_openai(
                     target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
                 )
-                logger.info("=" * 60)
-                logger.info("✅ OpenAI API 분석 성공 완료")
-                logger.info(f"결과 키: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
-                logger.info("=" * 60)
+                if settings.LOG_LEVEL == "DEBUG":
+                    logger.debug("=" * 60)
+                    logger.debug("✅ OpenAI API 분석 성공 완료")
+                    logger.debug(f"결과 키: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+                    logger.debug("=" * 60)
+                else:
+                    logger.info("OpenAI API 분석 성공 완료")
             except ValueError as ve:
                 # API 키 관련 오류는 재시도하지 않음
                 logger.error(f"❌ OpenAI API 키 오류: {ve}", exc_info=True)
@@ -115,9 +113,12 @@ async def analyze_target(
             except Exception as e:
                 logger.error("=" * 60)
                 logger.error(f"❌ OpenAI API 호출 실패: {type(e).__name__}: {e}")
-                logger.error(f"상세 오류: {str(e)}")
-                import traceback
-                logger.error(f"스택 트레이스:\n{traceback.format_exc()}")
+                # 프로덕션에서는 상세 스택 트레이스 제한 (보안)
+                if not IS_VERCEL:
+                    import traceback
+                    logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                else:
+                    logger.error("상세 오류 정보는 서버 로그에서만 확인 가능합니다.")
                 logger.error("=" * 60)
                 # OpenAI 실패 시 Gemini로 재시도
                 if has_gemini_key:
@@ -146,9 +147,12 @@ async def analyze_target(
                 try:
                     if progress_tracker:
                         await progress_tracker.update(60, "Gemini API로 결과 보완 중...")
-                    logger.info("=" * 60)
-                    logger.info("🔄 Gemini API로 결과 보완 시작")
-                    logger.info("=" * 60)
+                    if settings.LOG_LEVEL == "DEBUG":
+                        logger.debug("=" * 60)
+                        logger.debug("🔄 Gemini API로 결과 보완 시작")
+                        logger.debug("=" * 60)
+                    else:
+                        logger.info("Gemini API로 결과 보완 시작")
                     gemini_result = await _analyze_with_gemini(
                         target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
                     )
@@ -156,14 +160,19 @@ async def analyze_target(
                     if progress_tracker:
                         await progress_tracker.update(85, "OpenAI + Gemini 결과 통합 중...")
                     result = _merge_analysis_results(result, gemini_result, target_type)
-                    logger.info("=" * 60)
-                    logger.info("✅ OpenAI + Gemini 결과 통합 완료")
-                    logger.info("=" * 60)
+                    if settings.LOG_LEVEL == "DEBUG":
+                        logger.debug("=" * 60)
+                        logger.debug("✅ OpenAI + Gemini 결과 통합 완료")
+                        logger.debug("=" * 60)
+                    else:
+                        logger.info("OpenAI + Gemini 결과 통합 완료")
                 except Exception as e:
                     logger.warning("=" * 60)
                     logger.warning(f"⚠️ Gemini API 보완 중 오류 발생 (OpenAI 결과만 사용): {type(e).__name__}: {e}")
-                    import traceback
-                    logger.warning(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                    # 프로덕션에서는 상세 스택 트레이스 제한 (보안)
+                    if not IS_VERCEL:
+                        import traceback
+                        logger.warning(f"상세 스택 트레이스:\n{traceback.format_exc()}")
                     logger.warning("=" * 60)
                     # Gemini 실패해도 OpenAI 결과는 유지
                     if progress_tracker:
@@ -172,18 +181,24 @@ async def analyze_target(
             # OpenAI가 없고 Gemini만 있는 경우
             if progress_tracker:
                 await progress_tracker.update(10, "Gemini API로 분석 시작...")
-            logger.info("=" * 60)
-            logger.info("🚀 Gemini API 호출 시작 (OpenAI 없음)")
-            logger.info(f"API 키 확인: ✅ (길이: {len(gemini_key)} 문자)")
-            logger.info("=" * 60)
+            if settings.LOG_LEVEL == "DEBUG":
+                logger.debug("=" * 60)
+                logger.debug("🚀 Gemini API 호출 시작 (OpenAI 없음)")
+                logger.debug(f"API 키: ✅ 설정됨")
+                logger.debug("=" * 60)
+            else:
+                logger.info("Gemini API 호출 시작")
             try:
                 result = await _analyze_with_gemini(
                     target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
                 )
-                logger.info("=" * 60)
-                logger.info("✅ Gemini API 분석 성공 완료")
-                logger.info(f"결과 키: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
-                logger.info("=" * 60)
+                if settings.LOG_LEVEL == "DEBUG":
+                    logger.debug("=" * 60)
+                    logger.debug("✅ Gemini API 분석 성공 완료")
+                    logger.debug(f"결과 키: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+                    logger.debug("=" * 60)
+                else:
+                    logger.info("Gemini API 분석 성공 완료")
             except ValueError as ve:
                 # API 키 관련 오류는 재시도하지 않음
                 logger.error(f"❌ Gemini API 키 오류: {ve}", exc_info=True)
@@ -207,7 +222,17 @@ async def analyze_target(
             result = _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
         
         logger.info(f"✅ 타겟 분석 완료: {target_keyword}")
-        return result
+        
+        # 결과 정규화 (분석 유형별 표준화된 구조로 변환)
+        try:
+            normalized_result = normalize_analysis_result(result, target_type)
+            normalized_result = ensure_result_structure(normalized_result, target_type)
+            logger.info(f"✅ 결과 정규화 완료: {target_type}")
+            return normalized_result
+        except Exception as e:
+            logger.warning(f"⚠️ 결과 정규화 실패 (원본 결과 반환): {e}")
+            # 정규화 실패해도 원본 결과는 반환
+            return ensure_result_structure(result, target_type)
         
     except ValueError as ve:
         # API 키 관련 오류는 그대로 전파
@@ -216,8 +241,12 @@ async def analyze_target(
     except Exception as e:
         logger.error("=" * 60)
         logger.error(f"❌ 타겟 분석 중 치명적 오류: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        # 프로덕션에서는 상세 스택 트레이스 제한 (보안)
+        if not IS_VERCEL:
+            import traceback
+            logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        else:
+            logger.error("상세 오류 정보는 서버 로그에서만 확인 가능합니다.")
         logger.error("=" * 60)
         # 예외 발생 시에도 기본 분석 결과라도 반환
         logger.warning("⚠️ 기본 분석 모드로 fallback 시도")
@@ -242,27 +271,27 @@ async def _analyze_with_gemini(
         
         # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
         # 여러 소스에서 API 키 확인 (우선순위: 환경 변수 > Settings)
-        api_key_env = os.getenv('GEMINI_API_KEY')
-        api_key_settings = getattr(settings, 'GEMINI_API_KEY', None)
-        api_key = api_key_env or api_key_settings
+        api_key = get_api_key_safely('GEMINI_API_KEY')
         
-        if not api_key or len(api_key.strip()) == 0:
-            logger.error(f"GEMINI_API_KEY 미설정 - env: {bool(api_key_env)}, settings: {bool(api_key_settings)}")
+        if not api_key:
+            logger.error("GEMINI_API_KEY 미설정")
             raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다.")
         
-        logger.info("=" * 60)
-        logger.info("🚀 Gemini API 호출 시작")
-        logger.info(f"API 키 확인: ✅ (길이: {len(api_key)} 문자)")
-        logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}")
-        logger.info(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')}")
-        logger.info("=" * 60)
+        if settings.LOG_LEVEL == "DEBUG":
+            logger.debug("=" * 60)
+            logger.debug("🚀 Gemini API 호출 시작")
+            logger.debug(f"API 키: ✅ 설정됨")
+            logger.debug(f"모델: {getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')}")
+            logger.debug("=" * 60)
+        else:
+            logger.info("Gemini API 호출 시작")
         
         # 프롬프트 생성 및 최적화 (토큰 최적화 강화)
         additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
         
-        # 토큰 최적화 적용 (더 공격적으로)
-        prompt = optimize_prompt(prompt, max_length=4000)  # 프롬프트 최대 4000자로 제한 (기존 8000에서 절반)
+        # 토큰 최적화 적용 (설정 파일에서 값 가져오기)
+        prompt = optimize_prompt(prompt, max_length=getattr(settings, 'PROMPT_MAX_LENGTH', 4000))
         prompt_tokens = estimate_tokens(prompt)
         
         # 모델 설정 (기본값: gemini-2.5-flash)
@@ -274,8 +303,8 @@ async def _analyze_with_gemini(
         try:
             from google import genai
             
-            # API 키 설정 (환경 변수 또는 설정에서)
-            api_key = settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+            # API 키 설정 (보안 유틸리티 사용)
+            api_key = get_api_key_safely('GEMINI_API_KEY')
             if api_key:
                 client = genai.Client(api_key=api_key)
             else:
@@ -288,16 +317,19 @@ async def _analyze_with_gemini(
             
             # 토큰 수 계산 및 max_tokens 설정 (출력 토큰 제한)
             full_prompt_tokens = estimate_tokens(full_prompt)
-            max_output_tokens = min(get_max_tokens_for_model(model_name, full_prompt_tokens), 3000)  # 최대 3000 토큰으로 제한하여 속도 향상
+            max_output_tokens = min(get_max_tokens_for_model(model_name, full_prompt_tokens), getattr(settings, 'MAX_OUTPUT_TOKENS', 3000))
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
-            logger.info("=" * 60)
-            logger.info("📡 Gemini API 요청 전송 중...")
-            logger.info(f"모델: {model_name}")
-            logger.info(f"프롬프트 길이: {len(full_prompt)} 문자")
-            logger.info(f"프롬프트 토큰 추정: {full_prompt_tokens}")
-            logger.info(f"최대 출력 토큰: {max_output_tokens}")
-            logger.info("=" * 60)
+            if settings.LOG_LEVEL == "DEBUG":
+                logger.debug("=" * 60)
+                logger.debug("📡 Gemini API 요청 전송 중...")
+                logger.debug(f"모델: {model_name}")
+                logger.debug(f"프롬프트 길이: {len(full_prompt)} 문자")
+                logger.debug(f"프롬프트 토큰 추정: {full_prompt_tokens}")
+                logger.debug(f"최대 출력 토큰: {max_output_tokens}")
+                logger.debug("=" * 60)
+            else:
+                logger.info(f"Gemini API 요청 전송 중... (모델: {model_name})")
             try:
                 response = await generate_content_with_fallback(
                     client=client,
@@ -310,14 +342,21 @@ async def _analyze_with_gemini(
                     },
                     logger=logger,
                 )
-                logger.info("=" * 60)
-                logger.info("✅ Gemini API 응답 수신 완료")
-                logger.info("=" * 60)
+                if settings.LOG_LEVEL == "DEBUG":
+                    logger.debug("=" * 60)
+                    logger.debug("✅ Gemini API 응답 수신 완료")
+                    logger.debug("=" * 60)
+                else:
+                    logger.info("Gemini API 응답 수신 완료")
             except Exception as e:
                 logger.error("=" * 60)
                 logger.error(f"❌ Gemini API 호출 실패: {type(e).__name__}: {e}")
-                import traceback
-                logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                # 프로덕션에서는 상세 스택 트레이스 제한 (보안)
+                if not IS_VERCEL:
+                    import traceback
+                    logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+                else:
+                    logger.error("상세 오류 정보는 서버 로그에서만 확인 가능합니다.")
                 logger.error("=" * 60)
                 raise ValueError(f"Gemini API 호출 실패: {str(e)}")
             
@@ -329,7 +368,10 @@ async def _analyze_with_gemini(
             # 새로운 방식이 없으면 기존 방식 시도
             import google.generativeai as genai_old
             
-            genai_old.configure(api_key=settings.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY'))
+            api_key_old = get_api_key_safely('GEMINI_API_KEY')
+            if not api_key_old:
+                raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다.")
+            genai_old.configure(api_key=api_key_old)
             
             # 시스템 메시지와 프롬프트 결합 (최적화)
             system_message = _build_system_message(target_type)
@@ -337,7 +379,7 @@ async def _analyze_with_gemini(
             
             # 토큰 수 계산 및 max_tokens 설정 (출력 토큰 제한)
             full_prompt_tokens = estimate_tokens(full_prompt)
-            max_output_tokens = min(get_max_tokens_for_model(model_name, full_prompt_tokens), 3000)  # 최대 3000 토큰으로 제한하여 속도 향상
+            max_output_tokens = min(get_max_tokens_for_model(model_name, full_prompt_tokens), getattr(settings, 'MAX_OUTPUT_TOKENS', 3000))
             
             # API 호출 (비동기 실행을 위해 run_in_executor 사용)
             loop = asyncio.get_event_loop()
@@ -463,8 +505,12 @@ async def _analyze_with_gemini(
     except Exception as e:
         logger.error("=" * 60)
         logger.error(f"❌ Gemini API 호출 실패: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        # 프로덕션에서는 상세 스택 트레이스 제한 (보안)
+        if not IS_VERCEL:
+            import traceback
+            logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        else:
+            logger.error("상세 오류 정보는 서버 로그에서만 확인 가능합니다.")
         logger.error("=" * 60)
         raise ValueError(f"Gemini API 호출 실패: {str(e)}")
 
@@ -483,16 +529,17 @@ async def _analyze_with_openai(
         
         # API 키 확인 (환경 변수에서 직접 읽기 - Vercel 호환성)
         # 여러 소스에서 API 키 확인 (우선순위: 환경 변수 > Settings)
-        api_key_env = os.getenv('OPENAI_API_KEY')
-        api_key_settings = getattr(settings, 'OPENAI_API_KEY', None)
-        api_key = api_key_env or api_key_settings
+        api_key = get_api_key_safely('OPENAI_API_KEY')
         
-        if not api_key or len(api_key.strip()) == 0:
-            logger.error(f"OPENAI_API_KEY 미설정 - env: {bool(api_key_env)}, settings: {bool(api_key_settings)}")
+        if not api_key:
+            logger.error("OPENAI_API_KEY 미설정")
             raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
         
-        logger.info(f"OpenAI API 클라이언트 초기화 중... (모델: {settings.OPENAI_MODEL})")
-        logger.info(f"API 키 소스: {'환경 변수' if api_key_env else 'Settings'}, 길이: {len(api_key)} 문자")
+        if settings.LOG_LEVEL == "DEBUG":
+            logger.debug(f"OpenAI API 클라이언트 초기화 중... (모델: {settings.OPENAI_MODEL})")
+            logger.debug(f"API 키: ✅ 설정됨")
+        else:
+            logger.info(f"OpenAI API 클라이언트 초기화 중... (모델: {settings.OPENAI_MODEL})")
         client = AsyncOpenAI(api_key=api_key)
         
         # 프롬프트 생성 및 최적화 (토큰 최적화 강화)
@@ -503,8 +550,8 @@ async def _analyze_with_openai(
         additional_context_optimized = optimize_additional_context(additional_context, max_length=300)
         prompt = _build_analysis_prompt(target_keyword, target_type, additional_context_optimized, start_date, end_date)
         
-        # 토큰 최적화 적용 (더 공격적으로)
-        prompt = optimize_prompt(prompt, max_length=4000)  # 프롬프트 최대 4000자로 제한 (기존 8000에서 절반)
+        # 토큰 최적화 적용 (설정 파일에서 값 가져오기)
+        prompt = optimize_prompt(prompt, max_length=getattr(settings, 'PROMPT_MAX_LENGTH', 4000))
         prompt_tokens = estimate_tokens(prompt)
         
         # 시스템 메시지 생성 및 최적화 (이미 간소화됨)
@@ -520,13 +567,16 @@ async def _analyze_with_openai(
             await progress_tracker.update(30, "OpenAI API 요청 전송 중...")
         
         # API 호출
-        logger.info("=" * 60)
-        logger.info("📡 OpenAI API 요청 전송 중...")
-        logger.info(f"모델: {settings.OPENAI_MODEL}")
-        logger.info(f"프롬프트 길이: {len(prompt)} 문자")
-        logger.info(f"프롬프트 토큰 추정: {full_prompt_tokens}")
-        logger.info(f"최대 출력 토큰: {max_output_tokens}")
-        logger.info("=" * 60)
+        if settings.LOG_LEVEL == "DEBUG":
+            logger.debug("=" * 60)
+            logger.debug("📡 OpenAI API 요청 전송 중...")
+            logger.debug(f"모델: {settings.OPENAI_MODEL}")
+            logger.debug(f"프롬프트 길이: {len(prompt)} 문자")
+            logger.debug(f"프롬프트 토큰 추정: {full_prompt_tokens}")
+            logger.debug(f"최대 출력 토큰: {max_output_tokens}")
+            logger.debug("=" * 60)
+        else:
+            logger.info(f"OpenAI API 요청 전송 중... (모델: {settings.OPENAI_MODEL})")
         try:
             response = await client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
@@ -538,16 +588,23 @@ async def _analyze_with_openai(
                 max_tokens=min(max_output_tokens, 4000),  # 최대 출력 토큰 제한 (4000으로 제한하여 속도 향상)
                 response_format={"type": "json_object"}  # JSON 응답 강제
             )
-            logger.info("=" * 60)
-            logger.info("✅ OpenAI API 응답 수신 완료")
-            logger.info(f"응답 ID: {response.id if hasattr(response, 'id') else 'N/A'}")
-            logger.info(f"사용된 토큰: {response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'}")
-            logger.info("=" * 60)
+            if settings.LOG_LEVEL == "DEBUG":
+                logger.debug("=" * 60)
+                logger.debug("✅ OpenAI API 응답 수신 완료")
+                logger.debug(f"응답 ID: {response.id if hasattr(response, 'id') else 'N/A'}")
+                logger.debug(f"사용된 토큰: {response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'}")
+                logger.debug("=" * 60)
+            else:
+                logger.info("OpenAI API 응답 수신 완료")
         except Exception as api_error:
             logger.error("=" * 60)
             logger.error(f"❌ OpenAI API 호출 중 오류 발생: {type(api_error).__name__}: {api_error}")
-            import traceback
-            logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+            # 프로덕션에서는 상세 스택 트레이스 제한 (보안)
+            if not IS_VERCEL:
+                import traceback
+                logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+            else:
+                logger.error("상세 오류 정보는 서버 로그에서만 확인 가능합니다.")
             logger.error("=" * 60)
             raise ValueError(f"OpenAI API 호출 실패: {str(api_error)}")
         
@@ -640,8 +697,12 @@ async def _analyze_with_openai(
     except Exception as e:
         logger.error("=" * 60)
         logger.error(f"❌ OpenAI API 호출 실패: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        # 프로덕션에서는 상세 스택 트레이스 제한 (보안)
+        if not IS_VERCEL:
+            import traceback
+            logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
+        else:
+            logger.error("상세 오류 정보는 서버 로그에서만 확인 가능합니다.")
         logger.error("=" * 60)
         raise ValueError(f"OpenAI API 호출 실패: {str(e)}")
 
@@ -666,16 +727,11 @@ def _analyze_basic(
     
     # MECE 구조로 기본 분석 결과 반환
     # API 키 상태 확인 (환경 변수에서 직접 확인 - Vercel 호환성)
-    openai_env = os.getenv('OPENAI_API_KEY')
-    gemini_env = os.getenv('GEMINI_API_KEY')
-    openai_settings = getattr(settings, 'OPENAI_API_KEY', None)
-    gemini_settings = getattr(settings, 'GEMINI_API_KEY', None)
+    openai_key = get_api_key_safely('OPENAI_API_KEY')
+    gemini_key = get_api_key_safely('GEMINI_API_KEY')
     
-    openai_key = openai_env or openai_settings
-    gemini_key = gemini_env or gemini_settings
-    
-    has_openai = bool(openai_key and len(openai_key.strip()) > 0)
-    has_gemini = bool(gemini_key and len(gemini_key.strip()) > 0)
+    has_openai = bool(openai_key)
+    has_gemini = bool(gemini_key)
     
     api_key_status = {
         "openai_configured": has_openai,
@@ -877,15 +933,30 @@ def _merge_analysis_results(openai_result: Dict[str, Any], gemini_result: Dict[s
 
 
 def _build_system_message(target_type: str) -> str:
-    """시스템 메시지 생성 (토큰 최적화)"""
-    base_instruction = "Respond ONLY in valid JSON. Follow MECE principles. Be data-driven and actionable."
+    """시스템 메시지 생성 (프롬프트 엔지니어링 개선)"""
+    base_instruction = """You are an expert analyst. Follow these rules strictly:
+1. Respond ONLY in valid JSON format (no markdown code blocks)
+2. Apply MECE principle: Mutually Exclusive, Collectively Exhaustive
+3. Be data-driven: provide evidence, metrics, and sources
+4. Be actionable: include specific, implementable recommendations
+5. Use Chain-of-Thought reasoning: show your analysis process
+6. Ensure accuracy: distinguish facts from estimates clearly"""
     
     if target_type == "audience":
-        return f"Senior digital marketer and online customer behavior consultant with 15+ years experience. {base_instruction} Provide comprehensive audience analysis report in consulting firm quality with MECE structure."
+        return f"""Senior digital marketer and customer behavior consultant (15+ years). 
+Expertise: audience segmentation, persona development, customer journey mapping, behavioral psychology.
+{base_instruction}
+Deliver: comprehensive audience analysis with consulting-grade quality, MECE structure, and actionable insights."""
     elif target_type == "keyword":
-        return f"Senior digital marketer and online customer behavior consultant with 15+ years experience. {base_instruction} Provide comprehensive keyword analysis report in consulting firm quality with MECE structure."
+        return f"""Senior SEO and digital marketing strategist (15+ years).
+Expertise: keyword research, search intent analysis, competitive analysis, content strategy.
+{base_instruction}
+Deliver: comprehensive keyword analysis with search volume estimates, competition analysis, and strategic recommendations."""
     else:  # comprehensive
-        return f"Senior strategic marketing consultant. {base_instruction} Provide comprehensive analysis combining keyword and audience insights for strategic recommendations."
+        return f"""Senior strategic marketing consultant (15+ years).
+Expertise: integrated marketing strategy, market research, competitive intelligence, growth strategy.
+{base_instruction}
+Deliver: comprehensive analysis combining keyword and audience insights with strategic recommendations and execution roadmap."""
 
 
 def _build_analysis_prompt(
@@ -922,13 +993,18 @@ def _build_analysis_prompt(
         
         prompt = f"""# [오디언스 분석 보고서] {target_keyword} | 기간: {period_display} | 분석 유형: #2 오디언스 분석(타겟/페르소나)
 
+## 역할 및 전문성
 당신은 "디지털 마케터 및 온라인 고객 행동, 마케팅 컨설턴트 업무를 15년 이상 수행한 시니어 마케터"입니다.
+전문 분야: 고객 세그먼테이션, 페르소나 개발, 고객 여정 맵핑, 행동 심리학, 데이터 기반 마케팅 전략
+
+## 분석 방법론
 아래 입력값을 바탕으로, 해당 기간의 주요 데이터(뉴스/웹/커뮤니티/리뷰/소셜/검색 의도 등)를 '크롤링하여 확보한 것처럼' 폭넓게 리서치하고, 컨설팅 업체 보고서 수준으로 MECE 구조로 오디언스 분석 결과를 작성하세요.
 
-단, 실제 크롤링/접속이 불가할 수 있으므로:
+## 데이터 처리 원칙
 - 가능한 경우: 최신·관련성 높은 공개 자료를 근거로 분석을 구성하고,
 - 불가한 경우: "추정/가정"과 "검증 필요"를 명확히 표기하되, 보고서 품질(논리·구조·실행안)은 유지하세요.
 - 모든 주장에는 근거(출처) 또는 산출 방법을 붙이세요.
+- Chain-of-Thought: 분석 과정을 단계별로 명시하세요 (데이터 수집 → 패턴 식별 → 인사이트 도출 → 전략 제안)
 
 [입력값]
 - 분석 키워드: {target_keyword}
@@ -1017,6 +1093,15 @@ E. 마케팅 거버넌스(전략 운영 체계)
 - 추정은 추정으로 표시(검증 체크리스트 포함)
 - 실행안 중심(채널/콘텐츠/운영/거버넌스까지 연결)
 - 문서에 그대로 붙여넣기 좋은 서식(번호/계층/불릿) 유지
+- Chain-of-Thought: 각 결론에 도달한 분석 과정을 명시
+- Evidence-based: 모든 주장에 근거와 출처 제공
+
+[분석 프로세스]
+1. 데이터 수집: 관련 데이터 소스 식별 및 수집
+2. 패턴 분석: 데이터에서 패턴, 트렌드, 이상 징후 식별
+3. 인사이트 도출: 패턴에서 비즈니스 인사이트 추출
+4. 전략 제안: 인사이트를 바탕으로 실행 가능한 전략 수립
+5. 검증: 제안된 전략의 실현 가능성 및 효과 검증
 
 이제 위 포맷으로 보고서를 JSON 형식으로 작성하세요. 반드시 유효한 JSON 형식으로만 응답하세요.
 
@@ -1202,13 +1287,18 @@ E. 마케팅 거버넌스(전략 운영 체계)
         
         prompt = f"""# [키워드 분석 보고서] {target_keyword} | 기간: {period_display} | 분석 유형: #1 키워드 분석
 
-당신은 "디지털 마케터 및 온라인 고객 행동, 마케팅 컨설턴트 업무를 15년 이상 수행한 시니어 마케터"입니다. 
+## 역할 및 전문성
+당신은 "SEO 및 디지털 마케팅 전략가로서 15년 이상의 경력을 가진 시니어 마케터"입니다.
+전문 분야: 키워드 리서치, 검색 의도 분석, 경쟁 분석, 콘텐츠 전략, SEO 최적화
+
+## 분석 방법론
 아래 입력값을 바탕으로, 해당 기간의 주요 데이터(뉴스/웹/커뮤니티/검색 트렌드 등)를 '크롤링하여 확보한 것처럼' 폭넓게 리서치하고, 컨설팅 업체 보고서 수준으로 MECE 구조로 분석 결과를 작성하세요.
 
-단, 실제 크롤링/접속이 불가할 수 있으므로:
+## 데이터 처리 원칙
 - 가능한 경우: 최신·관련성 높은 공개 자료를 근거로 분석을 구성하고,
 - 불가한 경우: "추정/가정"과 "검증 필요"를 명확히 표기하되, 보고서 품질(논리·구조·실행안)은 유지하세요.
 - 모든 수치/주장에는 근거(출처) 또는 산출 방법을 붙이세요.
+- Chain-of-Thought: 검색 트렌드 분석 → 경쟁도 평가 → 기회 식별 → 전략 제안의 과정을 명시하세요.
 
 [입력값]
 - 분석 키워드: {target_keyword}
@@ -1462,15 +1552,28 @@ E. 실행 시사점(디지털 마케팅 관점)
 }
 """
     else:  # comprehensive
-        # 종합 분석 프롬프트: 키워드 분석 + 오디언스 분석 핵심 통합 (토큰 최적화)
-        prompt = f"""Comprehensive analysis: {target_keyword}
-{period_info}
+        # 종합 분석 프롬프트: 키워드 분석 + 오디언스 분석 핵심 통합 (프롬프트 엔지니어링 개선)
+        prompt = f"""# [종합 분석 보고서] {target_keyword} | 기간: {period_info} | 분석 유형: #3 종합 분석
+
+## 역할 및 전문성
+당신은 "통합 마케팅 전략 컨설턴트로서 15년 이상의 경력을 가진 시니어 마케터"입니다.
+전문 분야: 통합 마케팅 전략, 시장 리서치, 경쟁 인텔리전스, 성장 전략, 데이터 기반 의사결정
+
+## 분석 방법론
+키워드 분석과 오디언스 분석을 통합하여 전략적 인사이트를 도출하세요.
 {period_instruction}
+
+## 통합 분석 원칙
+- 키워드 기회와 오디언스 특성을 연결하여 시너지 효과 식별
+- 중복 제거: 키워드와 오디언스 분석에서 중복되는 인사이트는 통합
+- 전략 중심: 실행 가능한 통합 마케팅 전략 제안
+- Chain-of-Thought: 키워드 분석 → 오디언스 분석 → 통합 인사이트 → 전략 제안의 과정을 명시
+
 """
         if additional_context:
-            prompt += f"Context: {additional_context}\n"
+            prompt += f"**추가 컨텍스트**: {additional_context}\n\n"
         
-        prompt += """Respond in JSON (combine keyword and audience insights, remove duplicates, focus on forward-looking recommendations):
+        prompt += """다음 JSON 구조로 응답하세요 (키워드와 오디언스 인사이트를 통합하고, 중복을 제거하며, 미래 지향적 권장사항에 집중):
 {
   "executive_summary": "3-5 paragraph summary integrating keyword opportunities and audience characteristics with strategic recommendations",
   "key_findings": {

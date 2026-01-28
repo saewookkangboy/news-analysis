@@ -13,6 +13,7 @@ import ErrorMessage from './ErrorMessage';
 import { handleApiError } from '../utils/errorHandler';
 import { DashboardService, CategoryType } from '../services/dashboardService';
 import { DashboardOverview, FunnelData, KPITrend, RecentEvent, ScenarioPerformance, CategoryMetrics } from '../services/dashboardService';
+import { CACHE_CONFIG } from '../config/constants';
 
 interface DashboardData {
   overview: DashboardOverview;
@@ -30,10 +31,11 @@ interface CacheEntry<T> {
   category: CategoryType;
 }
 
-// 간단한 메모리 캐시 구현
+// 간단한 메모리 캐시 구현 (메모리 누수 방지)
 class DataCache {
   private cache: Map<string, CacheEntry<any>> = new Map();
-  private readonly TTL = 30000; // 30초 캐시 유지
+  private readonly TTL = CACHE_CONFIG.TTL;
+  private readonly MAX_SIZE = CACHE_CONFIG.MAX_SIZE;
 
   get<T>(key: string, category: CategoryType): T | null {
     const entry = this.cache.get(key);
@@ -51,10 +53,20 @@ class DataCache {
       return null;
     }
     
+    // 주기적으로 만료된 항목 정리
+    if (this.cache.size > this.MAX_SIZE) {
+      this.cleanup();
+    }
+    
     return entry.data as T;
   }
 
   set<T>(key: string, data: T, category: CategoryType): void {
+    // 캐시 크기 제한 체크
+    if (this.cache.size >= this.MAX_SIZE) {
+      this.cleanup();
+    }
+    
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
@@ -64,6 +76,24 @@ class DataCache {
 
   clear(): void {
     this.cache.clear();
+  }
+  
+  private cleanup(): void {
+    const now = Date.now();
+    // 만료된 항목 제거
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > this.TTL) {
+        this.cache.delete(key);
+      }
+    }
+    
+    // 여전히 크기가 크면 오래된 항목 제거 (LRU 방식)
+    if (this.cache.size > this.MAX_SIZE) {
+      const sorted = Array.from(this.cache.entries())
+        .sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const toRemove = sorted.slice(0, this.cache.size - this.MAX_SIZE);
+      toRemove.forEach(([key]) => this.cache.delete(key));
+    }
   }
 }
 
@@ -91,10 +121,21 @@ const Dashboard: React.FC = React.memo(() => {
       setLoading(true);
       setError(null);
 
-      // 모든 API 호출을 병렬로 실행
-      // 실제 백엔드 API가 없으므로 더미 데이터 반환 (나중에 실제 API로 교체)
-      const [overviewRes, funnelsRes, kpiTrendsRes, recentEventsRes, scenarioPerformanceRes, categoryMetricsRes] = await Promise.all([
-        DashboardService.getOverview(category).catch(() => ({ success: true, data: { total_events: 0, total_users: 0, conversion_rate: 0 } })),
+      // 우선순위별로 API 호출 (overview 먼저, 나머지는 병렬)
+      const overviewRes = await DashboardService.getOverview(category).catch(() => ({
+        success: true,
+        data: {
+          total_events: 0,
+          total_users: 0,
+          conversion_rate: 0,
+          total_sessions: 0,
+          total_conversions: 0,
+          average_conversion_rate: 0,
+        },
+      }));
+
+      // overview 성공 후 나머지 API 병렬 호출
+      const [funnelsRes, kpiTrendsRes, recentEventsRes, scenarioPerformanceRes, categoryMetricsRes] = await Promise.all([
         DashboardService.getFunnels(undefined, category).catch(() => ({ success: true, data: [] })),
         DashboardService.getKPITrends(undefined, undefined, category).catch(() => ({ success: true, data: [] })),
         DashboardService.getRecentEvents(undefined, category).catch(() => ({ success: true, data: [] })),
@@ -119,13 +160,23 @@ const Dashboard: React.FC = React.memo(() => {
         }
       }
 
+      // 타입 안정성 개선: Non-null assertion 제거, 기본값 제공
+      const defaultOverview: DashboardOverview = {
+        total_events: 0,
+        total_users: 0,
+        conversion_rate: 0,
+        total_sessions: 0,
+        total_conversions: 0,
+        average_conversion_rate: 0,
+      };
+
       const dashboardData: DashboardData = {
-        overview: overviewRes.data!,
-        funnels: funnelsRes.data!,
-        kpi_trends: kpiTrendsRes.data!,
-        recent_events: recentEventsRes.data!,
-        scenario_performance: scenarioPerformanceRes.data!,
-        category_metrics: categoryMetricsRes.data!
+        overview: overviewRes.data ?? defaultOverview,
+        funnels: funnelsRes.data ?? [],
+        kpi_trends: kpiTrendsRes.data ?? [],
+        recent_events: recentEventsRes.data ?? [],
+        scenario_performance: scenarioPerformanceRes.data ?? [],
+        category_metrics: categoryMetricsRes.data ?? {},
       };
 
       // 캐시에 저장
@@ -191,29 +242,32 @@ const Dashboard: React.FC = React.memo(() => {
   const categoryTitle = useMemo(() => getCategoryTitle(selectedCategory), [selectedCategory, getCategoryTitle]);
 
   return (
-    <div className="min-h-full flex flex-col lg:flex-row bg-white">
+    <div className="min-h-full flex flex-col lg:flex-row bg-white" role="main" aria-label="대시보드">
       {/* 좌측: 분석 설정 패널 */}
-      <div className="w-full lg:w-80 xl:w-96 bg-white border-r border-black p-6 overflow-y-auto custom-scrollbar">
+      <aside 
+        className="w-full lg:w-80 xl:w-96 bg-white border-r border-black p-4 sm:p-6 overflow-y-auto custom-scrollbar"
+        aria-label="분석 설정"
+      >
         <AnalysisSettings
           selectedCategory={selectedCategory}
           onCategoryChange={handleCategoryChange}
           showAdminPanel={showAdminPanel}
           onToggleAdminPanel={() => setShowAdminPanel(!showAdminPanel)}
         />
-      </div>
+      </aside>
 
       {/* 우측: 분석 결과 패널 */}
-      <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar" aria-label="분석 결과">
         <div className="space-y-6 max-w-7xl mx-auto">
           {/* 페이지 헤더 */}
-          <div className="mb-6 animate-fade-in">
-            <h1 className="text-2xl font-semibold text-black mb-1 tracking-tight ibm-plex-sans-kr-bold" style={{ letterSpacing: '-1.04px' }}>
+          <header className="mb-6 animate-fade-in">
+            <h1 className="text-xl sm:text-2xl font-semibold text-black mb-1 tracking-tight ibm-plex-sans-kr-bold" style={{ letterSpacing: '-1.04px' }}>
               분석 결과
             </h1>
-            <p className="text-sm text-black ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.42px' }}>
+            <p className="text-xs sm:text-sm text-black ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.42px' }}>
               {categoryTitle} 고객 여정과 퍼널 분석을 통한 실시간 인사이트
             </p>
-          </div>
+          </header>
 
           {/* 관리자 패널 */}
           {showAdminPanel && (
@@ -229,94 +283,94 @@ const Dashboard: React.FC = React.memo(() => {
           />
 
       {/* 개요 메트릭 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section aria-label="개요 메트릭" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <MetricCard
           title="총 사용자"
-          value={dashboardData.overview.total_users.toLocaleString()}
+          value={(dashboardData.overview.total_users ?? 0).toLocaleString()}
           change="+12.5%"
           changeType="positive"
           icon="users"
         />
         <MetricCard
           title="총 세션"
-          value={dashboardData.overview.total_sessions.toLocaleString()}
+          value={(dashboardData.overview.total_sessions ?? dashboardData.overview.total_events ?? 0).toLocaleString()}
           change="+8.3%"
           changeType="positive"
           icon="sessions"
         />
         <MetricCard
           title="총 전환"
-          value={dashboardData.overview.total_conversions.toLocaleString()}
+          value={(dashboardData.overview.total_conversions ?? 0).toLocaleString()}
           change="+15.2%"
           changeType="positive"
           icon="conversions"
         />
         <MetricCard
           title="평균 전환율"
-          value={`${dashboardData.overview.average_conversion_rate}%`}
+          value={`${dashboardData.overview.average_conversion_rate ?? dashboardData.overview.conversion_rate ?? 0}%`}
           change="+2.1%"
           changeType="positive"
           icon="conversion-rate"
         />
         {/* 카테고리별 추가 메트릭 */}
-        {selectedCategory === 'ecommerce' && dashboardData.overview.total_revenue && (
+        {selectedCategory === 'ecommerce' && (dashboardData.overview.total_revenue != null || dashboardData.overview.average_order_value != null) && (
           <>
             <MetricCard
               title="총 매출"
-              value={`₩${dashboardData.overview.total_revenue.toLocaleString()}`}
+              value={`₩${(dashboardData.overview.total_revenue ?? 0).toLocaleString()}`}
               change="+18.5%"
               changeType="positive"
               icon="revenue"
             />
             <MetricCard
               title="평균 주문 금액"
-              value={`₩${dashboardData.overview.average_order_value?.toLocaleString()}`}
+              value={`₩${(dashboardData.overview.average_order_value ?? 0).toLocaleString()}`}
               change="+5.2%"
               changeType="positive"
               icon="order-value"
             />
           </>
         )}
-        {selectedCategory === 'lead_generation' && dashboardData.overview.total_leads && (
+        {selectedCategory === 'lead_generation' && (dashboardData.overview.total_leads != null || dashboardData.overview.lead_conversion_rate != null) && (
           <>
             <MetricCard
               title="총 리드"
-              value={dashboardData.overview.total_leads.toLocaleString()}
+              value={(dashboardData.overview.total_leads ?? 0).toLocaleString()}
               change="+22.1%"
               changeType="positive"
               icon="leads"
             />
             <MetricCard
               title="리드 전환율"
-              value={`${dashboardData.overview.lead_conversion_rate}%`}
+              value={`${dashboardData.overview.lead_conversion_rate ?? 0}%`}
               change="+3.8%"
               changeType="positive"
               icon="lead-conversion"
             />
           </>
         )}
-        {selectedCategory === 'general_website' && dashboardData.overview.total_page_views && (
+        {selectedCategory === 'general_website' && (dashboardData.overview.total_page_views != null || dashboardData.overview.unique_visitors != null) && (
           <>
             <MetricCard
               title="총 페이지뷰"
-              value={dashboardData.overview.total_page_views.toLocaleString()}
+              value={(dashboardData.overview.total_page_views ?? 0).toLocaleString()}
               change="+12.3%"
               changeType="positive"
               icon="page-views"
             />
             <MetricCard
               title="순 방문자"
-              value={dashboardData.overview.unique_visitors?.toLocaleString() || '0'}
+              value={(dashboardData.overview.unique_visitors ?? 0).toLocaleString()}
               change="+8.7%"
               changeType="positive"
               icon="unique-visitors"
             />
           </>
         )}
-      </div>
+      </section>
 
           {/* 차트 섹션 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <section aria-label="차트 분석" className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* 퍼널 차트 */}
             <div className="chart-container">
               <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 고객 여정 퍼널</h3>
@@ -328,10 +382,10 @@ const Dashboard: React.FC = React.memo(() => {
               <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 전환율 트렌드</h3>
               <KPITrendChart data={dashboardData.kpi_trends} />
             </div>
-          </div>
+          </section>
 
           {/* 시나리오 비교 및 최근 이벤트 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <section aria-label="시나리오 및 이벤트" className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* 시나리오 성과 비교 */}
             <div className="chart-container">
               <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 시나리오별 성과</h3>
@@ -343,7 +397,7 @@ const Dashboard: React.FC = React.memo(() => {
               <h3 className="chart-title ibm-plex-sans-kr-semibold">{categoryTitle} 최근 사용자 이벤트</h3>
               <RecentEventsTable events={dashboardData.recent_events} />
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>

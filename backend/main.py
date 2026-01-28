@@ -47,17 +47,62 @@ logging.basicConfig(
 # FastAPI 앱 생성
 app = FastAPI(
     title="뉴스 트렌드 분석 서비스",
-    description="일정 기간과 키워드를 기반으로 뉴스를 크롤링하고 트렌드 분석 및 워드 클라우드를 제공하는 서비스",
-    version="1.0.0"
+    description="""
+    AI 기반 뉴스 트렌드 분석 및 마케팅 인사이트 서비스
+    
+    ## 주요 기능
+    
+    * **타겟 분석**: 키워드, 오디언스, 종합 분석
+    * **감정 분석**: 텍스트 감정 및 톤 분석
+    * **키워드 추천**: 연관 키워드 및 SEO 최적화 제안
+    * **대시보드**: 실시간 메트릭 및 퍼널 분석
+    
+    ## AI 모델
+    
+    * OpenAI GPT-4o-mini
+    * Google Gemini 2.0 Flash
+    
+    ## API 문서
+    
+    * Swagger UI: `/docs`
+    * ReDoc: `/redoc`
+    * OpenAPI JSON: `/openapi.json`
+    """,
+    version="1.0.0",
+    contact={
+        "name": "News Trend Analyzer",
+        "url": "https://news-trend-analyzer.vercel.app",
+    },
+    license_info={
+        "name": "MIT",
+    },
+    servers=[
+        {
+            "url": "https://news-trend-analyzer.vercel.app",
+            "description": "프로덕션 서버"
+        },
+        {
+            "url": "http://localhost:8000",
+            "description": "로컬 개발 서버"
+        }
+    ]
 )
 
-# CORS 설정
+# CORS 설정 (보안 강화)
+# 환경 변수 기반 CORS 설정
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",")]
+
+# Vercel 환경에서는 프로덕션 도메인만 허용
+if IS_VERCEL:
+    ALLOWED_ORIGINS = ["https://news-trend-analyzer.vercel.app"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 프로덕션에서는 특정 도메인만 허용
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # 캐싱 미들웨어 추가 (CORS 이후에 추가)
@@ -71,6 +116,22 @@ app.include_router(router, prefix="/api", tags=["analysis"])
 from backend.api.cache_stats import router as cache_router
 app.include_router(cache_router, prefix="/api", tags=["cache"])
 
+# 성능 메트릭 라우터 등록
+from backend.api.metrics import router as metrics_router
+app.include_router(metrics_router, prefix="/api", tags=["metrics"])
+
+# Dashboard API 라우터 등록 (스텁)
+from backend.api.dashboard_routes import router as dashboard_router
+app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
+
+# 모니터링 라우터 등록
+try:
+    from backend.api.monitoring import router as monitoring_router
+    app.include_router(monitoring_router, tags=["monitoring"])
+except ImportError:
+    # psutil이 설치되지 않은 경우 기본 헬스 체크만 제공
+    logger.warning("psutil이 설치되지 않아 기본 헬스 체크만 제공됩니다.")
+
 # 루트 및 헬스 체크 엔드포인트는 정적 파일 마운트 전에 등록해야 함
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -81,7 +142,69 @@ async def root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>뉴스 트렌드 분석 서비스</title>
+        
+        <!-- Primary Meta Tags -->
+        <title>뉴스 트렌드 분석 서비스 | AI 기반 키워드, 오디언스, 경쟁자 분석</title>
+        <meta name="title" content="뉴스 트렌드 분석 서비스 | AI 기반 키워드, 오디언스, 경쟁자 분석">
+        <meta name="description" content="AI 기반 키워드 분석, 오디언스 분석, 경쟁자 분석을 제공하는 뉴스 트렌드 분석 플랫폼. OpenAI GPT-4o-mini와 Google Gemini 2.0 Flash를 활용한 전문적인 마케팅 인사이트를 제공합니다.">
+        <meta name="keywords" content="뉴스 트렌드 분석, 키워드 분석, 오디언스 분석, 경쟁자 분석, AI 분석, 마케팅 인사이트, 트렌드 분석, 키워드 리서치, SEO 분석, 마케팅 분석 도구">
+        <meta name="author" content="News Trend Analyzer">
+        <meta name="robots" content="index, follow">
+        <meta name="language" content="Korean">
+        <meta name="revisit-after" content="7 days">
+        
+        <!-- Open Graph / Facebook -->
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://news-trend-analyzer.vercel.app/">
+        <meta property="og:title" content="뉴스 트렌드 분석 서비스 | AI 기반 키워드, 오디언스, 경쟁자 분석">
+        <meta property="og:description" content="AI 기반 키워드 분석, 오디언스 분석, 경쟁자 분석을 제공하는 뉴스 트렌드 분석 플랫폼. OpenAI GPT-4o-mini와 Google Gemini 2.0 Flash를 활용한 전문적인 마케팅 인사이트를 제공합니다.">
+        <meta property="og:image" content="https://news-trend-analyzer.vercel.app/og-image.png">
+        <meta property="og:locale" content="ko_KR">
+        <meta property="og:site_name" content="뉴스 트렌드 분석 서비스">
+        
+        <!-- Twitter -->
+        <meta property="twitter:card" content="summary_large_image">
+        <meta property="twitter:url" content="https://news-trend-analyzer.vercel.app/">
+        <meta property="twitter:title" content="뉴스 트렌드 분석 서비스 | AI 기반 키워드, 오디언스, 경쟁자 분석">
+        <meta property="twitter:description" content="AI 기반 키워드 분석, 오디언스 분석, 경쟁자 분석을 제공하는 뉴스 트렌드 분석 플랫폼. OpenAI GPT-4o-mini와 Google Gemini 2.0 Flash를 활용한 전문적인 마케팅 인사이트를 제공합니다.">
+        <meta property="twitter:image" content="https://news-trend-analyzer.vercel.app/og-image.png">
+        
+        <!-- Canonical URL -->
+        <link rel="canonical" href="https://news-trend-analyzer.vercel.app/">
+        
+        <!-- Favicon -->
+        <link rel="icon" type="image/x-icon" href="/favicon.ico">
+        
+        <!-- Structured Data (JSON-LD) -->
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          "name": "뉴스 트렌드 분석 서비스",
+          "alternateName": "News Trend Analyzer",
+          "url": "https://news-trend-analyzer.vercel.app/",
+          "description": "AI 기반 키워드 분석, 오디언스 분석, 경쟁자 분석을 제공하는 뉴스 트렌드 분석 플랫폼",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "KRW"
+          },
+          "featureList": [
+            "키워드 분석",
+            "오디언스 분석",
+            "경쟁자 분석",
+            "AI 기반 인사이트",
+            "트렌드 분석"
+          ],
+          "provider": {
+            "@type": "Organization",
+            "name": "News Trend Analyzer"
+          }
+        }
+        </script>
+        
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@100;200;300;400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Nanum+Gothic&family=Noto+Sans+KR:wght@100..900&display=swap" rel="stylesheet">
@@ -2118,13 +2241,54 @@ async def root():
     return HTMLResponse(content=html_content)
 
 
-@app.get("/health")
-async def health_check():
-    """헬스 체크 엔드포인트"""
-    return {
-        "status": "healthy",
-        "service": "news-trend-analyzer"
-    }
+# 헬스 체크는 monitoring 라우터로 이동 (더 상세한 정보 제공)
+
+@app.get("/robots.txt", response_class=HTMLResponse)
+async def robots_txt():
+    """robots.txt 파일 제공"""
+    robots_content = """# robots.txt for News Trend Analyzer
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /docs
+Disallow: /openapi.json
+
+# Sitemap
+Sitemap: https://news-trend-analyzer.vercel.app/sitemap.xml
+"""
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content=robots_content, media_type="text/plain")
+
+@app.get("/sitemap.xml", response_class=HTMLResponse)
+async def sitemap_xml():
+    """sitemap.xml 파일 제공"""
+    from datetime import datetime
+    sitemap_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+  
+  <!-- Homepage -->
+  <url>
+    <loc>https://news-trend-analyzer.vercel.app/</loc>
+    <lastmod>{datetime.now().strftime('%Y-%m-%d')}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  
+  <!-- Dashboard (if accessible) -->
+  <url>
+    <loc>https://news-trend-analyzer.vercel.app/app</loc>
+    <lastmod>{datetime.now().strftime('%Y-%m-%d')}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+</urlset>
+"""
+    from fastapi.responses import Response
+    return Response(content=sitemap_content, media_type="application/xml")
 
 # 정적 파일 서빙 (Vercel 환경에서는 건너뛰기)
 if not IS_VERCEL:

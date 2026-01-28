@@ -1,0 +1,22 @@
+{
+  "name": "generate_screen_from_text",
+  "description": "Generates a NEW screen based on your prompt (and context). Use extract_design_context first to maintain consistency.",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "description": "Text description of the screen to generate"
+      },
+      "project_id": {
+        "type": "string",
+        "description": "The ID of the project to create the screen in"
+      },
+      "design_context": {
+        "type": "string",
+        "description": "Optional design context from extract_design_context to maintain consistency"
+      }
+    },
+    "required": ["prompt", "project_id"]
+  }
+}

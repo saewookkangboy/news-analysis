@@ -326,6 +326,19 @@ python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8001
 
 프로젝트에 대한 문의사항이 있으시면 이슈를 생성해주세요.
 
+## 🤖 Dev Agent Kit 통합
+
+이 프로젝트는 [dev-agent-kit](https://github.com/saewookkangboy/dev-agent-kit)의 기능을 통합하여 개발 워크플로우를 향상시킵니다.
+
+### 주요 기능
+- **Spec-kit**: 사양 문서 관리 (`.spec-kit/`)
+- **To-do Management**: 작업 관리 (`.project-data/todos.json`)
+- **Agent Roles**: 역할 기반 개발 지원
+- **SEO/AI SEO/GEO 최적화**: 웹 최적화 도구
+- **Cursor 서브에이전트**: 통합 개발 에이전트 (`.cursor/agents/dev-agent-kit.md`)
+
+자세한 내용은 [Dev Agent Kit 통합 가이드](./docs/DEV_AGENT_KIT_INTEGRATION.md)를 참고하세요.
+
 ## 🔮 향후 개선 사항
 
 - [ ] 분석 결과 시각화 (차트, 그래프)
@@ -339,4 +352,4 @@ python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8001
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: 2026-01-26
+**Last Updated**: 2026-01-28

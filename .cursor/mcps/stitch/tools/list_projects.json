@@ -1,0 +1,9 @@
+{
+  "name": "list_projects",
+  "description": "Lists all your available Stitch projects.",
+  "arguments": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}

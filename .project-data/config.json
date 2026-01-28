@@ -1,0 +1,38 @@
+{
+  "project_name": "news-trend-analyzer",
+  "version": "1.0.0",
+  "description": "AI 기반 키워드, 오디언스, 경쟁자 분석 플랫폼",
+  "tech_stack": {
+    "backend": {
+      "framework": "FastAPI",
+      "language": "Python 3.8+",
+      "server": "Uvicorn"
+    },
+    "frontend": {
+      "framework": "React",
+      "language": "TypeScript",
+      "styling": "Tailwind CSS"
+    },
+    "deployment": {
+      "platform": "Vercel",
+      "functions": "Serverless"
+    },
+    "ai_models": {
+      "openai": "gpt-4o-mini",
+      "gemini": "gemini-2.0-flash"
+    }
+  },
+  "features": [
+    "키워드 분석",
+    "오디언스 분석",
+    "경쟁자 분석",
+    "감정 분석",
+    "키워드 추천",
+    "진행 상황 추적"
+  ],
+  "api_endpoints": {
+    "target_analyze": "/api/target/analyze",
+    "health": "/health",
+    "cache_stats": "/api/cache/stats"
+  }
+}

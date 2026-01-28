@@ -21,7 +21,13 @@ const NetworkStatus: React.FC = () => {
   }
 
   return (
-    <div className="bg-yellow-500 text-black text-center py-2 px-4 text-sm ibm-plex-sans-kr-medium">
+    <div 
+      className="bg-yellow-500 text-black text-center py-2 px-4 text-sm ibm-plex-sans-kr-medium"
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+    >
+      <span className="sr-only">경고: </span>
       인터넷 연결이 끊어졌습니다. 오프라인 모드로 작동 중입니다.
     </div>
   );
