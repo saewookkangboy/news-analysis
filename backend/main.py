@@ -1370,8 +1370,33 @@ async def root():
                         
                         // data.data를 기본으로 사용하고, analysis 필드가 있으면 병합
                         if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
-                            // data.data를 기본으로 사용
+                            // data.data를 기본으로 사용 (한글 키도 포함)
                             analysisData = { ...data.data };
+                            
+                            // 한글 키가 있는지 확인
+                            const hasKoreanKeys = Object.keys(analysisData).some(key => 
+                                key === "Executive Summary" || 
+                                key === "분석 개요" || 
+                                key === "Key Insights" || 
+                                key === "오디언스 상세 분석" ||
+                                key === "전략 제안" ||
+                                key === "실행 로드맵" ||
+                                key === "리스크 & 거버넌스" ||
+                                key === "부록"
+                            );
+                            
+                            if (hasKoreanKeys) {
+                                console.log("한글 키 감지됨:", Object.keys(analysisData).filter(key => 
+                                    key === "Executive Summary" || 
+                                    key === "분석 개요" || 
+                                    key === "Key Insights" || 
+                                    key === "오디언스 상세 분석" ||
+                                    key === "전략 제안" ||
+                                    key === "실행 로드맵" ||
+                                    key === "리스크 & 거버넌스" ||
+                                    key === "부록"
+                                ));
+                            }
                             
                             // analysis 필드가 있고 그것이 객체인 경우 병합
                             if (data.data.analysis && typeof data.data.analysis === "object") {
@@ -1445,14 +1470,55 @@ async def root():
                         resultText += "**분석 일시**: " + new Date().toLocaleString("ko-KR") + "\\n\\n";
                         resultText += "---\\n\\n";
                         
+                        // 한글 키 매핑 함수 (오디언스 분석용)
+                        function mapKoreanKeys(data) {
+                            if (!data || typeof data !== "object") return data;
+                            
+                            const mapped = { ...data };
+                            
+                            // 한글 키 -> 영문 키 매핑
+                            const keyMapping = {
+                                "Executive Summary": "executive_summary",
+                                "분석 개요": "analysis_overview",
+                                "Key Insights": "key_insights",
+                                "오디언스 상세 분석": "detailed_audience_analysis",
+                                "전략 제안": "strategic_recommendations",
+                                "실행 로드맵": "execution_roadmap",
+                                "리스크 & 거버넌스": "risk_governance",
+                                "부록": "appendix"
+                            };
+                            
+                            // 한글 키를 영문 키로 매핑
+                            Object.keys(keyMapping).forEach(koreanKey => {
+                                if (mapped[koreanKey] !== undefined) {
+                                    const englishKey = keyMapping[koreanKey];
+                                    if (!mapped[englishKey]) {
+                                        mapped[englishKey] = mapped[koreanKey];
+                                    }
+                                }
+                            });
+                            
+                            return mapped;
+                        }
+                        
                         // 오디언스 분석인 경우 특별한 포맷팅 (MECE 구조 지원)
                         if (targetType === "audience" && analysisData) {
-                            // Executive Summary (중복 제거)
+                            // 한글 키 매핑 적용
+                            analysisData = mapKoreanKeys(analysisData);
+                            
+                            // Executive Summary (중복 제거) - 한글 키 지원
                             let executiveSummary = null;
                             if (analysisData.executive_summary) {
                                 executiveSummary = analysisData.executive_summary;
                             } else if (analysisData.summary) {
                                 executiveSummary = analysisData.summary;
+                            } else if (analysisData["Executive Summary"]) {
+                                executiveSummary = analysisData["Executive Summary"];
+                            }
+                            
+                            // 한글 키가 있는 경우 직접 처리 (영문 키가 없을 때)
+                            if (!executiveSummary && analysisData["Executive Summary"]) {
+                                executiveSummary = analysisData["Executive Summary"];
                             }
                             
                             // 중복된 내용 제거 (API 키 경고 메시지 등)
@@ -1483,13 +1549,29 @@ async def root():
                                 }
                             }
                             
-                            // Key Findings
-                            if (analysisData.key_findings) {
+                            // Key Findings 또는 Key Insights 처리 (한글 키 지원)
+                            const keyFindings = analysisData.key_findings || 
+                                               analysisData.key_insights || 
+                                               analysisData["Key Insights"];
+                            if (keyFindings) {
                                 resultText += "## 주요 발견사항 (Key Findings)\\n\\n" ;
                                 
-                                const keyFindings = analysisData.key_findings;
-                                
-                                // primary_insights가 배열인 경우
+                                // Key Insights가 배열인 경우 직접 처리
+                                if (Array.isArray(keyFindings)) {
+                                    keyFindings.forEach((insight, idx) => {
+                                        if (typeof insight === "object") {
+                                            resultText += "### " + (insight.insight || "인사이트 " + (idx + 1)) + "\\n\\n";
+                                            if (insight.evidence) resultText += "- **근거**: " + insight.evidence + "\\n";
+                                            if (insight.interpretation) resultText += "- **해석**: " + insight.interpretation + "\\n";
+                                            if (insight.implication) resultText += "- **시사점**: " + insight.implication + "\\n";
+                                            resultText += "\\n";
+                                        } else {
+                                            resultText += (idx + 1) + ". " + insight + "\\n";
+                                        }
+                                    });
+                                    resultText += "\\n";
+                                } else if (typeof keyFindings === "object") {
+                                    // primary_insights가 배열인 경우
                                 if (keyFindings.primary_insights && Array.isArray(keyFindings.primary_insights) && keyFindings.primary_insights.length > 0) {
                                     resultText += "### 핵심 인사이트\\n\\n" ;
                                     keyFindings.primary_insights.forEach((point, idx) => {
@@ -1545,6 +1627,7 @@ async def root():
                                         resultText += "\\n" ;
                                     }
                                 });
+                                }
                             } else if (analysisData.key_points && Array.isArray(analysisData.key_points) && analysisData.key_points.length > 0) {
                                 resultText += "## 주요 포인트\\n\\n" ;
                                 analysisData.key_points.forEach((point, idx) => {
@@ -1558,8 +1641,10 @@ async def root():
                                 resultText += "\\n" ;
                             }
                             
-                            // Detailed Analysis
-                            const detailedAnalysis = analysisData.detailed_analysis;
+                            // Detailed Analysis (한글 키 지원)
+                            const detailedAnalysis = analysisData.detailed_analysis || 
+                                                     analysisData.detailed_audience_analysis || 
+                                                     analysisData["오디언스 상세 분석"];
                             const insights = detailedAnalysis?.insights || analysisData.insights;
                             
                             // detailed_analysis가 직접 객체인 경우
@@ -1733,11 +1818,13 @@ async def root():
                                 }
                             }
                             
-                            // Strategic Recommendations
-                            if (analysisData.strategic_recommendations) {
+                            // Strategic Recommendations (한글 키 지원)
+                            const strategicRecs = analysisData.strategic_recommendations || 
+                                                  analysisData["전략 제안"];
+                            if (strategicRecs) {
                                 resultText += "## 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
                                 
-                                const recs = analysisData.strategic_recommendations;
+                                const recs = strategicRecs;
                                 
                                 if (recs.immediate_actions && recs.immediate_actions.length > 0) {
                                     resultText += "### 즉시 실행 가능한 전략\\n\\n" ;
@@ -1923,11 +2010,13 @@ async def root():
                                 }
                             }
                             
-                            // Strategic Recommendations
-                            if (analysisData.strategic_recommendations) {
+                            // Strategic Recommendations (한글 키 지원)
+                            const strategicRecs = analysisData.strategic_recommendations || 
+                                                  analysisData["전략 제안"];
+                            if (strategicRecs) {
                                 resultText += "## 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
                                 
-                                const recs = analysisData.strategic_recommendations;
+                                const recs = strategicRecs;
                                 
                                 if (recs.immediate_actions && recs.immediate_actions.length > 0) {
                                     resultText += "### 즉시 실행 가능한 전략\\n\\n" ;
@@ -2398,13 +2487,249 @@ async def root():
                             resultText += "\\n" ;
                         }
                         
+                        // 한글 키가 있는 경우 직접 처리 (오디언스 분석)
+                        if (targetType === "audience" && analysisData && !resultText.includes("Executive Summary") && !resultText.includes("주요 발견사항")) {
+                            // 한글 키로 직접 데이터 표시
+                            if (analysisData["Executive Summary"]) {
+                                resultText += "## Executive Summary\\n\\n" + (analysisData["Executive Summary"]) + "\\n\\n";
+                            }
+                            if (analysisData["분석 개요"]) {
+                                resultText += "## 분석 개요\\n\\n";
+                                const overview = analysisData["분석 개요"];
+                                if (typeof overview === "object") {
+                                    Object.keys(overview).forEach(key => {
+                                        if (overview[key]) {
+                                            if (typeof overview[key] === "object") {
+                                                resultText += "### " + key + "\\n\\n";
+                                                Object.keys(overview[key]).forEach(subKey => {
+                                                    resultText += "- **" + subKey + "**: " + (typeof overview[key][subKey] === "object" ? JSON.stringify(overview[key][subKey], null, 2) : overview[key][subKey]) + "\\n";
+                                                });
+                                                resultText += "\\n";
+                                            } else {
+                                                resultText += "- **" + key + "**: " + overview[key] + "\\n";
+                                            }
+                                        }
+                                    });
+                                    resultText += "\\n";
+                                } else {
+                                    resultText += overview + "\\n\\n";
+                                }
+                            }
+                            if (analysisData["Key Insights"]) {
+                                resultText += "## Key Insights\\n\\n";
+                                const insights = analysisData["Key Insights"];
+                                if (Array.isArray(insights)) {
+                                    insights.forEach((insight, idx) => {
+                                        if (typeof insight === "object") {
+                                            resultText += "### " + (insight.insight || "인사이트 " + (idx + 1)) + "\\n\\n";
+                                            if (insight.evidence) resultText += "- **근거**: " + insight.evidence + "\\n";
+                                            if (insight.interpretation) resultText += "- **해석**: " + insight.interpretation + "\\n";
+                                            if (insight.implication) resultText += "- **시사점**: " + insight.implication + "\\n";
+                                            resultText += "\\n";
+                                        } else {
+                                            resultText += (idx + 1) + ". " + insight + "\\n";
+                                        }
+                                    });
+                                    resultText += "\\n";
+                                } else if (typeof insights === "object") {
+                                    Object.keys(insights).forEach(key => {
+                                        resultText += "### " + key + "\\n\\n";
+                                        if (Array.isArray(insights[key])) {
+                                            insights[key].forEach((item, idx) => {
+                                                resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
+                                            });
+                                        } else {
+                                            resultText += insights[key] + "\\n";
+                                        }
+                                        resultText += "\\n";
+                                    });
+                                } else {
+                                    resultText += insights + "\\n\\n";
+                                }
+                            }
+                            if (analysisData["오디언스 상세 분석"]) {
+                                resultText += "## 오디언스 상세 분석\\n\\n";
+                                const detailed = analysisData["오디언스 상세 분석"];
+                                if (typeof detailed === "object") {
+                                    Object.keys(detailed).forEach(key => {
+                                        if (detailed[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof detailed[key] === "object" && !Array.isArray(detailed[key])) {
+                                                Object.keys(detailed[key]).forEach(subKey => {
+                                                    const value = detailed[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            resultText += "- **" + subKey + "**:\\n";
+                                                            value.forEach((item, idx) => {
+                                                                if (typeof item === "object") {
+                                                                    resultText += "  " + (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
+                                                                } else {
+                                                                    resultText += "  " + (idx + 1) + ". " + item + "\\n";
+                                                                }
+                                                            });
+                                                        } else if (typeof value === "object") {
+                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else if (Array.isArray(detailed[key])) {
+                                                detailed[key].forEach((item, idx) => {
+                                                    if (typeof item === "object") {
+                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
+                                                    } else {
+                                                        resultText += (idx + 1) + ". " + item + "\\n";
+                                                    }
+                                                });
+                                            } else {
+                                                resultText += detailed[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += detailed + "\\n\\n";
+                                }
+                            }
+                            if (analysisData["전략 제안"]) {
+                                resultText += "## 전략 제안\\n\\n";
+                                const strategy = analysisData["전략 제안"];
+                                if (typeof strategy === "object") {
+                                    Object.keys(strategy).forEach(key => {
+                                        if (strategy[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof strategy[key] === "object" && !Array.isArray(strategy[key])) {
+                                                Object.keys(strategy[key]).forEach(subKey => {
+                                                    const value = strategy[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            value.forEach((item, idx) => {
+                                                                resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
+                                                            });
+                                                        } else if (typeof value === "object") {
+                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else if (Array.isArray(strategy[key])) {
+                                                strategy[key].forEach((item, idx) => {
+                                                    resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
+                                                });
+                                            } else {
+                                                resultText += strategy[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += strategy + "\\n\\n";
+                                }
+                            }
+                            if (analysisData["실행 로드맵"]) {
+                                resultText += "## 실행 로드맵\\n\\n";
+                                const roadmap = analysisData["실행 로드맵"];
+                                if (typeof roadmap === "object") {
+                                    Object.keys(roadmap).forEach(key => {
+                                        if (roadmap[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof roadmap[key] === "object") {
+                                                Object.keys(roadmap[key]).forEach(subKey => {
+                                                    const value = roadmap[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            resultText += "- **" + subKey + "**:\\n";
+                                                            value.forEach((item, idx) => {
+                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
+                                                            });
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else {
+                                                resultText += roadmap[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += roadmap + "\\n\\n";
+                                }
+                            }
+                            if (analysisData["리스크 & 거버넌스"]) {
+                                resultText += "## 리스크 & 거버넌스\\n\\n";
+                                const risk = analysisData["리스크 & 거버넌스"];
+                                if (typeof risk === "object") {
+                                    Object.keys(risk).forEach(key => {
+                                        if (risk[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof risk[key] === "object" && !Array.isArray(risk[key])) {
+                                                Object.keys(risk[key]).forEach(subKey => {
+                                                    const value = risk[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            resultText += "- **" + subKey + "**:\\n";
+                                                            value.forEach((item, idx) => {
+                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
+                                                            });
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else if (Array.isArray(risk[key])) {
+                                                risk[key].forEach((item, idx) => {
+                                                    resultText += (idx + 1) + ". " + item + "\\n";
+                                                });
+                                            } else {
+                                                resultText += risk[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += risk + "\\n\\n";
+                                }
+                            }
+                            if (analysisData["부록"]) {
+                                resultText += "## 부록\\n\\n";
+                                const appendix = analysisData["부록"];
+                                if (typeof appendix === "object") {
+                                    Object.keys(appendix).forEach(key => {
+                                        if (appendix[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (Array.isArray(appendix[key])) {
+                                                appendix[key].forEach((item, idx) => {
+                                                    if (typeof item === "object") {
+                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
+                                                    } else {
+                                                        resultText += (idx + 1) + ". " + item + "\\n";
+                                                    }
+                                                });
+                                            } else if (typeof appendix[key] === "object") {
+                                                resultText += JSON.stringify(appendix[key], null, 2) + "\\n";
+                                            } else {
+                                                resultText += appendix[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += appendix + "\\n\\n";
+                                }
+                            }
+                        }
+                        
                         // 결과가 비어있는 경우 처리
                         const baseReportText = "# 타겟 분석 보고서\\n\\n**분석 대상**: " + targetKeyword + "\\n**분석 유형**: " + (typeNames[targetType] || targetType) + " 분석\\n**분석 기간**: " + formData.start_date + " ~ " + formData.end_date + "\\n**분석 일시**: " + new Date().toLocaleString("ko-KR") + "\\n\\n---\\n\\n";
                         const currentText = resultText.trim();
                         const baseText = baseReportText.trim();
                         
-                        // 결과가 기본 헤더만 있는지 확인
-                        if (!resultText || currentText === baseText || currentText.length <= baseText.length + 50) {
+                        // 결과가 기본 헤더만 있는지 확인 (한글 키 처리 후에는 더 이상 체크하지 않음)
+                        if (!resultText || (currentText === baseText || currentText.length <= baseText.length + 50) && !analysisData["Executive Summary"] && !analysisData["분석 개요"] && !analysisData["Key Insights"]) {
                             resultText += "## ⚠️ 분석 결과 없음\\n\\n" ;
                             resultText += "분석 데이터를 받지 못했습니다.\\n\\n" ;
                             resultText += "**디버깅 정보**:\\n" ;
