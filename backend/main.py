@@ -136,7 +136,7 @@ except ImportError:
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """루트 엔드포인트 - HTML 랜딩 페이지 및 분석 인터페이스 제공 (블랙/화이트 미니멀 테마)"""
-    html_content = """
+    html_content = r"""
     <!DOCTYPE html>
     <html lang="ko">
     <head>

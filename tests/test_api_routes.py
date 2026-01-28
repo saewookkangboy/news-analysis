@@ -33,6 +33,8 @@ class TestTargetAnalyze:
             }
         )
         assert response.status_code == 400
+        data = response.json()
+        assert "error" in data or "detail" in data
     
     def test_analyze_target_missing_keyword(self):
         """키워드 누락 검증"""
@@ -55,6 +57,8 @@ class TestTargetAnalyze:
             }
         )
         assert response.status_code == 400
+        data = response.json()
+        assert "error" in data or "detail" in data
     
     def test_analyze_target_valid_request(self, no_api_keys):
         """유효한 요청 (API 키 없이 기본 분석 모드)"""
@@ -69,6 +73,55 @@ class TestTargetAnalyze:
         assert response.status_code == 200
         data = response.json()
         assert "success" in data or "target_keyword" in data
+    
+    def test_analyze_target_audience_type(self, no_api_keys):
+        """오디언스 타입 분석"""
+        response = client.post(
+            "/api/target/analyze",
+            json={
+                "target_keyword": "테스트",
+                "target_type": "audience"
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "target_type" in data or "success" in data
+    
+    def test_analyze_target_comprehensive_type(self, no_api_keys):
+        """종합 분석 타입"""
+        response = client.post(
+            "/api/target/analyze",
+            json={
+                "target_keyword": "테스트",
+                "target_type": "comprehensive"
+            }
+        )
+        assert response.status_code == 200
+    
+    def test_analyze_target_with_dates(self, no_api_keys):
+        """날짜 범위 포함 분석"""
+        response = client.post(
+            "/api/target/analyze",
+            json={
+                "target_keyword": "테스트",
+                "target_type": "keyword",
+                "start_date": "2025-01-01",
+                "end_date": "2025-01-31"
+            }
+        )
+        assert response.status_code == 200
+    
+    def test_analyze_target_with_context(self, no_api_keys):
+        """추가 컨텍스트 포함 분석"""
+        response = client.post(
+            "/api/target/analyze",
+            json={
+                "target_keyword": "테스트",
+                "target_type": "keyword",
+                "additional_context": "추가 정보"
+            }
+        )
+        assert response.status_code == 200
 
 
 class TestDashboardRoutes:
