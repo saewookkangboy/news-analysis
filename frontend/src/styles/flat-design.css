@@ -58,19 +58,22 @@ body {
 
 /* Flat Design Cards - No shadows, 1px border only */
 .flat-card {
-  background-color: var(--flat-bg-primary);
-  border: var(--border-width) solid var(--flat-border);
-  padding: var(--spacing-lg);
+  background-color: var(--flat-bg-primary) !important;
+  border: var(--border-width) solid var(--flat-border) !important;
+  padding: var(--spacing-lg) !important;
   /* No border-radius for strict flat, or minimal 4px */
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-sm) !important;
   /* No box-shadow */
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease, border-color 0.2s ease !important;
 }
 
 .flat-card:hover {
-  background-color: var(--flat-bg-secondary);
-  border-color: var(--flat-accent-primary);
+  background-color: var(--flat-bg-secondary) !important;
+  border-color: var(--flat-accent-primary) !important;
   /* No transform, no elevation */
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 /* Flat Buttons - Solid colors, no shadows */
@@ -194,12 +197,21 @@ body {
 
 /* Flat Metric Cards */
 .flat-metric-card {
-  background-color: var(--flat-bg-primary);
-  border: var(--border-width) solid var(--flat-border);
-  border-radius: var(--border-radius-sm);
-  padding: var(--spacing-lg);
-  text-align: center;
+  background-color: var(--flat-bg-primary) !important;
+  border: var(--border-width) solid var(--flat-border) !important;
+  border-radius: var(--border-radius-sm) !important;
+  padding: var(--spacing-lg) !important;
+  text-align: center !important;
   /* No box-shadow */
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.flat-metric-card:hover {
+  background-color: var(--flat-bg-secondary) !important;
+  border-color: var(--flat-accent-primary) !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .flat-metric-value {
@@ -292,9 +304,10 @@ body {
 
 /* Flat Navigation */
 .flat-nav {
-  background-color: var(--flat-bg-primary);
-  border-bottom: var(--border-width) solid var(--flat-border);
+  background-color: var(--flat-bg-primary) !important;
+  border-bottom: var(--border-width) solid var(--flat-border) !important;
   /* No box-shadow */
+  box-shadow: none !important;
 }
 
 .flat-nav-link {
@@ -385,12 +398,41 @@ body {
   }
 }
 
-/* Remove all shadows, gradients, and 3D effects globally */
-/* Note: This is a strong rule - use with caution */
-/* * {
+/* Remove all shadows, gradients, and 3D effects globally - FORCE FLAT DESIGN */
+/* 강제로 Flat Design 적용 */
+.flat-grid,
+.flat-grid *,
+.flat-metric-card,
+.flat-metric-card *,
+.flat-card,
+.flat-card *,
+.flat-nav,
+.flat-nav *,
+.flat-btn,
+.flat-btn *,
+.flat-heading-1,
+.flat-heading-2,
+.flat-heading-3,
+.flat-caption,
+.flat-body {
   box-shadow: none !important;
   text-shadow: none !important;
-} */
+}
+
+/* 모든 카드와 메트릭 카드에 그림자 제거 강제 적용 */
+.dashboard-card,
+.metric-card,
+.chart-container {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.dashboard-card:hover,
+.metric-card:hover,
+.chart-container:hover {
+  box-shadow: none !important;
+  transform: none !important;
+}
 
 /* Exception: Only allow flat borders for depth indication */
 .flat-elevation-1 {

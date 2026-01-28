@@ -18,7 +18,7 @@ const MetricCard: React.FC<MetricCardProps> = memo(({ title, value, change, chan
 
   return (
     <div 
-      className="flat-metric-card transition-colors duration-200 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2"
+      className="flat-metric-card"
       role="article"
       aria-label={`${title}: ${value}${change ? `, ${change}` : ''}`}
       tabIndex={0}

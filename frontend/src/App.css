@@ -53,17 +53,21 @@
   letter-spacing: -0.42px;
 }
 
-/* 카드 스타일 - 블랙/화이트 테마 (한글 폰트 적용) */
+/* 카드 스타일 - Flat Design 강제 적용 */
 .dashboard-card {
-  @apply bg-white rounded-lg p-6 border border-black transition-all duration-200;
+  @apply bg-white rounded-lg p-6 border border-black transition-colors duration-200;
   font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
   letter-spacing: -0.48px;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .dashboard-card:hover {
   /* Flat Design: No transform, only background color change */
-  background-color: #F9FAFB;
-  border-color: #2563EB;
+  background-color: #F9FAFB !important;
+  border-color: #2563EB !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .chart-container {
@@ -124,10 +128,17 @@
   @apply bg-white;
 }
 
-/* 메트릭 카드 - 블랙/화이트 테마 (한글 폰트 적용) */
+/* 메트릭 카드 - Flat Design 강제 적용 */
 .metric-card {
   @apply bg-white rounded-lg p-5 border border-black text-center;
   font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.metric-card:hover {
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .metric-value {

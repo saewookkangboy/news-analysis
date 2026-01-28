@@ -1,0 +1,115 @@
+/* ============================================
+   Flat Design 강제 오버라이드
+   모든 기존 스타일을 덮어쓰기
+   ============================================ */
+
+/* 모든 카드 스타일 강제 적용 */
+.dashboard-card,
+.metric-card,
+.chart-container,
+[class*="card"],
+[class*="Card"] {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+.dashboard-card:hover,
+.metric-card:hover,
+.chart-container:hover,
+[class*="card"]:hover,
+[class*="Card"]:hover {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* 모든 버튼 스타일 강제 적용 */
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-success,
+.btn-danger,
+[class*="btn"],
+[class*="Button"] {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+.btn:hover,
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-success:hover,
+.btn-danger:hover,
+[class*="btn"]:hover,
+[class*="Button"]:hover {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* 모든 입력 필드 스타일 강제 적용 */
+.form-input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+
+.form-input:focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+
+/* 모든 네비게이션 스타일 강제 적용 */
+.nav-link,
+[class*="nav"],
+[class*="Nav"] {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+
+.nav-link:hover,
+[class*="nav"]:hover,
+[class*="Nav"]:hover {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+
+/* 그라데이션 제거 (linear-gradient, radial-gradient만) */
+.dashboard-card,
+.metric-card,
+.chart-container,
+.btn,
+.nav-link {
+  background-image: none !important;
+}
+
+/* 3D 효과 제거 */
+.dashboard-card,
+.metric-card,
+.chart-container,
+.btn,
+.nav-link {
+  perspective: none !important;
+  transform-style: flat !important;
+}

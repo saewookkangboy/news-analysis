@@ -6,12 +6,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@100;200;300;400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Nanum+Gothic&family=Noto+Sans+KR:wght@100..900&display=swap');
 
-/* Flat Design System */
+/* ============================================
+   Flat Design System - 최우선 적용
+   ============================================ */
 @import './styles/flat-design.css';
 
 /* ============================================
-   최종 디자인 템플릿 - 블랙/화이트 미니멀 테마
-   Marketing Website Template 스타일 반영
+   기존 스타일 - Flat Design과 충돌하지 않도록 주의
    ============================================ */
 
 /* 기본 스타일 - Flat Design with Inter font */
@@ -200,16 +201,27 @@ code {
   @apply bg-white border border-gray-200 p-6 transition-colors duration-200;
   border-radius: 4px;
   /* No box-shadow, no transform on hover */
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .dashboard-card:hover {
   @apply bg-gray-50 border-blue-500;
   /* No transform, no elevation */
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 /* 메트릭 카드 - 개선된 타이포그래피 */
 .metric-card {
   @apply dashboard-card text-center;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.metric-card:hover {
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .metric-value {
@@ -236,6 +248,13 @@ code {
 /* 차트 컨테이너 - 개선된 스타일 */
 .chart-container {
   @apply dashboard-card;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.chart-container:hover {
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .chart-title {

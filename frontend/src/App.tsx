@@ -7,8 +7,10 @@ import NetworkStatus from './components/NetworkStatus';
 import SEOHead from './components/SEOHead';
 import LoadingSpinner from './components/LoadingSpinner';
 import { setupGlobalErrorHandler } from './utils/errorHandler';
-import './App.css';
+/* Flat Design을 최우선으로 적용 */
 import './styles/flat-design.css';
+import './styles/flat-design-override.css';
+import './App.css';
 
 // 코드 스플리팅: 라우트별 컴포넌트를 지연 로딩
 const Dashboard = lazy(() => import('./components/Dashboard'));

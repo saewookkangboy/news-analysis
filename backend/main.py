@@ -208,19 +208,88 @@ async def root():
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@100;200;300;400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Nanum+Gothic&family=Noto+Sans+KR:wght@100..900&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
         <style>
+            /* ============================================
+               Flat Design System - Professional & Minimal
+               Based on Stitch-generated design principles
+               ============================================ */
+            
+            /* Flat Design Variables */
+            :root {
+              --flat-bg-primary: #FFFFFF;
+              --flat-bg-secondary: #F9FAFB;
+              --flat-border: #E5E7EB;
+              --flat-text-primary: #111827;
+              --flat-text-secondary: #6B7280;
+              --flat-accent-primary: #2563EB;
+              --flat-accent-success: #10B981;
+              --flat-accent-error: #EF4444;
+              --flat-accent-warning: #F59E0B;
+              --spacing-xs: 4px;
+              --spacing-sm: 8px;
+              --spacing-md: 16px;
+              --spacing-lg: 24px;
+              --spacing-xl: 32px;
+              --spacing-2xl: 48px;
+              --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+              --font-size-xs: 12px;
+              --font-size-sm: 14px;
+              --font-size-base: 16px;
+              --font-size-lg: 18px;
+              --font-size-xl: 20px;
+              --font-size-2xl: 24px;
+              --font-size-3xl: 30px;
+              --border-width: 1px;
+              --border-radius-sm: 4px;
+              --border-radius-md: 8px;
+              --border-radius-lg: 12px;
+            }
+            
+            /* Flat Design 강제 적용 - 모든 그림자와 transform 제거 */
+            * {
+              box-shadow: none !important;
+              text-shadow: none !important;
+            }
+            
+            /* Flat Design 오버라이드 - 모든 카드, 버튼, 입력 필드 */
+            .btn,
+            .btn:hover,
+            .btn:focus,
+            .form-group input,
+            .form-group input:focus,
+            .form-group select,
+            .form-group select:focus,
+            .form-group textarea,
+            .form-group textarea:focus,
+            .link-card,
+            .link-card:hover,
+            .copy-btn,
+            .copy-btn:hover,
+            .result-section,
+            .progress-container,
+            .error {
+              box-shadow: none !important;
+              transform: none !important;
+            }
+            
+            /* Flat Design 애니메이션 - transform 제거 */
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
             * {
                 margin: 0;
                 padding: 0;
                 box-sizing: border-box;
             }
             body {
-                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background-color: #ffffff;
-                color: #000000;
+                font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background-color: #FFFFFF;
+                color: #111827;
                 min-height: 100vh;
                 letter-spacing: -0.48px;
-                line-height: 1.6;
+                line-height: 1.5;
                 -webkit-font-smoothing: antialiased;
                 -moz-osx-font-smoothing: grayscale;
             }
@@ -246,9 +315,11 @@ async def root():
             }
             .header {
                 background: white;
-                border-bottom: 1px solid black;
+                border-bottom: 1px solid #E5E7EB;
                 padding: 20px 24px;
                 flex-shrink: 0;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .header h1 {
                 font-size: 1.5rem;
@@ -288,9 +359,11 @@ async def root():
             .settings-panel {
                 width: 100%;
                 background: white;
-                border-right: 1px solid black;
+                border-right: 1px solid #E5E7EB;
                 padding: 24px;
                 overflow-y: auto;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             @media (min-width: 1024px) {
                 .settings-panel {
@@ -301,11 +374,11 @@ async def root():
             .settings-panel h2 {
                 font-size: 1.125rem;
                 font-weight: 600;
-                color: #000000;
+                color: #111827;
                 margin-bottom: 8px;
                 letter-spacing: -0.72px;
                 padding-bottom: 16px;
-                border-bottom: 1px solid black;
+                border-bottom: 1px solid #E5E7EB;
             }
             .settings-panel .description {
                 font-size: 0.75rem;
@@ -330,22 +403,25 @@ async def root():
             .form-group textarea {
                 width: 100%;
                 padding: 12px;
-                border: 1px solid black;
-                border-radius: 8px;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
                 font-size: 0.875rem;
                 background: white;
-                color: #000000;
-                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                color: #111827;
+                font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
                 letter-spacing: -0.42px;
-                transition: all 0.2s ease;
+                transition: border-color 0.2s ease, background-color 0.2s ease;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .form-group input:focus,
             .form-group select:focus,
             .form-group textarea:focus {
                 outline: none;
-                border-color: black;
-                transform: translateY(-1px);
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                border-color: #2563EB;
+                /* Flat Design: No transform, no box-shadow */
+                transform: none !important;
+                box-shadow: none !important;
             }
             .form-group textarea {
                 resize: vertical;
@@ -367,20 +443,26 @@ async def root():
             .btn {
                 width: 100%;
                 padding: 12px 24px;
-                background: black;
+                background: #2563EB;
                 color: white;
-                border: 1px solid black;
-                border-radius: 8px;
+                border: 1px solid #2563EB;
+                border-radius: 4px;
                 font-size: 0.875rem;
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.2s ease;
-                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                transition: background-color 0.2s ease, border-color 0.2s ease;
+                font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
                 letter-spacing: -0.42px;
+                min-height: 44px;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .btn:hover:not(:disabled) {
-                background: #333333;
-                transform: translateY(-1px);
+                background: #1D4ED8;
+                border-color: #1D4ED8;
+                /* Flat Design: No transform */
+                transform: none !important;
+                box-shadow: none !important;
             }
             .btn:disabled {
                 background: #666666;
@@ -425,8 +507,10 @@ async def root():
                 margin-top: 24px;
                 padding: 20px;
                 background: white;
-                border: 1px solid black;
-                border-radius: 8px;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .progress-bar-wrapper {
                 width: 100%;
@@ -464,14 +548,16 @@ async def root():
             }
             .error {
                 background: white;
-                color: #000000;
+                color: #111827;
                 padding: 16px;
-                border-radius: 8px;
-                border: 1px solid black;
+                border-radius: 4px;
+                border: 1px solid #EF4444;
                 margin-top: 20px;
                 display: none;
                 font-size: 0.875rem;
                 letter-spacing: -0.42px;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .error.show {
                 display: block;
@@ -480,17 +566,19 @@ async def root():
                 margin-top: 24px;
                 padding: 24px;
                 background: white;
-                border-radius: 8px;
-                border: 1px solid black;
+                border-radius: 4px;
+                border: 1px solid #E5E7EB;
                 display: none;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .result-section.show {
                 display: block;
                 animation: fadeIn 0.3s ease;
             }
             @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(10px); }
-                to { opacity: 1; transform: translateY(0); }
+                from { opacity: 0; }
+                to { opacity: 1; }
             }
             .result-header {
                 display: flex;
@@ -508,35 +596,42 @@ async def root():
                 letter-spacing: -0.72px;
             }
             .copy-btn {
-                background: black;
+                background: #2563EB;
                 color: white;
                 padding: 8px 16px;
-                border: 1px solid black;
-                border-radius: 6px;
+                border: 1px solid #2563EB;
+                border-radius: 4px;
                 font-size: 0.75rem;
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.2s ease;
-                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                transition: background-color 0.2s ease, border-color 0.2s ease;
+                font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
                 letter-spacing: -0.36px;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .copy-btn:hover {
-                background: #333333;
-                transform: translateY(-1px);
+                background: #1D4ED8;
+                border-color: #1D4ED8;
+                /* Flat Design: No transform */
+                transform: none !important;
+                box-shadow: none !important;
             }
             .result-content {
                 background: white;
                 padding: 20px;
-                border-radius: 8px;
+                border-radius: 4px;
                 white-space: pre-wrap;
-                font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
                 font-size: 0.875rem;
                 line-height: 1.6;
                 max-height: 70vh;
                 overflow-y: auto;
-                border: 1px solid black;
-                color: #000000;
+                border: 1px solid #E5E7EB;
+                color: #111827;
                 letter-spacing: -0.42px;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .links {
                 display: grid;
@@ -548,19 +643,24 @@ async def root():
             }
             .link-card {
                 background: white;
-                border: 1px solid black;
-                border-radius: 8px;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
                 padding: 20px;
                 text-decoration: none;
-                color: #000000;
-                transition: all 0.2s ease;
+                color: #111827;
+                transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
                 display: block;
                 text-align: center;
+                /* Flat Design: No box-shadow */
+                box-shadow: none !important;
             }
             .link-card:hover {
-                background: black;
-                color: white;
-                transform: translateY(-2px);
+                background: #F9FAFB;
+                color: #2563EB;
+                border-color: #2563EB;
+                /* Flat Design: No transform */
+                transform: none !important;
+                box-shadow: none !important;
             }
             .link-card h3 {
                 font-size: 1rem;
