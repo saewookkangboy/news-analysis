@@ -13,7 +13,7 @@
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
+  /* Flat Design: No transform */
 }
 
 .btn-secondary {
@@ -23,7 +23,7 @@
 }
 
 .btn-secondary:hover {
-  transform: translateY(-1px);
+  /* Flat Design: No transform */
 }
 
 .btn-danger {
@@ -41,8 +41,10 @@
 }
 
 .form-input:focus {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  /* Flat Design: No transform, no box-shadow */
+  outline: 2px solid #000000;
+  outline-offset: 2px;
+  border-color: #000000;
 }
 
 .form-label {
@@ -59,7 +61,9 @@
 }
 
 .dashboard-card:hover {
-  transform: translateY(-2px);
+  /* Flat Design: No transform, only background color change */
+  background-color: #F9FAFB;
+  border-color: #2563EB;
 }
 
 .chart-container {
@@ -160,11 +164,10 @@
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    /* Flat Design: No transform, only opacity */
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
