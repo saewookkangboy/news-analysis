@@ -76,7 +76,15 @@ async def analyze_target_stream_endpoint(
             progress_tracker = None
         
         async def generate():
+            chunk_count = 0
             try:
+                # 초기 진행률 전송
+                yield json.dumps({
+                    "type": "progress",
+                    "progress": 5,
+                    "message": "분석 준비 중..."
+                }, ensure_ascii=False) + "\n"
+                
                 async for chunk in analyze_target_stream(
                     target_keyword=target_keyword,
                     target_type=target_type,
@@ -86,17 +94,28 @@ async def analyze_target_stream_endpoint(
                     end_date=end_date,
                     progress_tracker=progress_tracker
                 ):
+                    chunk_count += 1
                     # JSON 형식으로 스트리밍
                     yield json.dumps(chunk, ensure_ascii=False) + "\n"
                     
                     # 완료 또는 오류 시 종료
                     if chunk.get("type") in ["complete", "error"]:
+                        logger.info(f"스트리밍 완료: {chunk_count}개 청크 전송")
                         break
+                
+                # 청크를 하나도 받지 못한 경우 (에러 처리)
+                if chunk_count == 0:
+                    logger.error("스트리밍: 청크를 받지 못함")
+                    yield json.dumps({
+                        "type": "error",
+                        "message": "분석이 시작되지 않았습니다. API 키 설정 및 서버 로그를 확인해주세요."
+                    }, ensure_ascii=False) + "\n"
+                    
             except Exception as e:
                 logger.error(f"스트리밍 생성 중 오류: {e}", exc_info=True)
                 yield json.dumps({
                     "type": "error",
-                    "message": str(e)
+                    "message": f"분석 중 오류가 발생했습니다: {str(e)}"
                 }, ensure_ascii=False) + "\n"
             finally:
                 # Progress tracker 정리

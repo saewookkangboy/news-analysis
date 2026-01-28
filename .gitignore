@@ -81,3 +81,4 @@ Thumbs.db
 
 # Dev Agent Kit
 .project-data/todos.json
+.env*.local

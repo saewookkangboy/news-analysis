@@ -1729,35 +1729,84 @@ async def analyze_target_stream(
         
         if not has_openai_key and not has_gemini_key:
             # 기본 분석 모드로 스트리밍
+            if progress_tracker:
+                await progress_tracker.update(10, "기본 분석 모드로 진행 중...")
+            yield {"type": "progress", "progress": 10, "message": "기본 분석 모드로 진행 중..."}
+            
             result = _analyze_basic(target_keyword, target_type, additional_context, start_date, end_date)
+            
+            if progress_tracker:
+                await progress_tracker.update(50, "기본 분석 결과 생성 완료")
+            yield {"type": "progress", "progress": 50, "message": "기본 분석 결과 생성 완료"}
+            
             # 기본 분석 결과를 문장 단위로 분리하여 스트리밍
             summary = result.get("executive_summary", "")
-            sentences = _split_into_sentences(summary)
-            for sentence in sentences:
+            if summary:
+                sentences = _split_into_sentences(summary)
+                for sentence in sentences:
+                    if sentence.strip():
+                        yield {
+                            "type": "sentence",
+                            "content": sentence.strip(),
+                            "section": "executive_summary"
+                        }
+            else:
+                # executive_summary가 없는 경우 기본 메시지
                 yield {
                     "type": "sentence",
-                    "content": sentence,
+                    "content": f"{target_keyword}에 대한 {target_type} 분석을 수행했습니다.",
                     "section": "executive_summary"
                 }
+            
+            if progress_tracker:
+                await progress_tracker.update(100, "분석 완료")
+            yield {"type": "progress", "progress": 100, "message": "분석 완료"}
             yield {"type": "complete", "data": result}
             return
         
         # OpenAI 스트리밍
         if has_openai_key:
+            chunk_received = False
             async for chunk in _analyze_with_openai_stream(
                 target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
             ):
+                chunk_received = True
                 yield chunk
                 if chunk.get("type") == "complete":
                     return
+                if chunk.get("type") == "error":
+                    return
+            
+            # 청크를 받지 못한 경우 (에러 처리)
+            if not chunk_received:
+                logger.error("OpenAI 스트리밍: 청크를 받지 못함")
+                yield {
+                    "type": "error",
+                    "message": "OpenAI API 응답을 받지 못했습니다. API 키 및 네트워크 상태를 확인해주세요."
+                }
+                return
+                
         # Gemini 스트리밍
         elif has_gemini_key:
+            chunk_received = False
             async for chunk in _analyze_with_gemini_stream(
                 target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
             ):
+                chunk_received = True
                 yield chunk
                 if chunk.get("type") == "complete":
                     return
+                if chunk.get("type") == "error":
+                    return
+            
+            # 청크를 받지 못한 경우 (에러 처리)
+            if not chunk_received:
+                logger.error("Gemini 스트리밍: 청크를 받지 못함")
+                yield {
+                    "type": "error",
+                    "message": "Gemini API 응답을 받지 못했습니다. API 키 및 네트워크 상태를 확인해주세요."
+                }
+                return
                     
     except Exception as e:
         logger.error(f"스트리밍 분석 중 오류: {e}", exc_info=True)

@@ -1034,7 +1034,10 @@ async def root():
                     ];
                     
                     let currentStepIndex = 0;
-                    const progressInterval = setInterval(() => {
+                    let progressInterval = null;
+                    
+                    // 진행률 인터벌 설정 (나중에 정리할 수 있도록 변수에 저장)
+                    progressInterval = setInterval(() => {
                         if (currentStepIndex < analysisSteps.length - 1) {
                             const currentStep = analysisSteps[currentStepIndex];
                             
@@ -1091,8 +1094,6 @@ async def root():
                         body: JSON.stringify(formData)
                     });
                     
-                    clearInterval(progressInterval);
-                    
                     console.log("API 스트리밍 응답 상태:", response.status, response.statusText);
                     
                     if (!response.ok) {
@@ -1100,101 +1101,136 @@ async def root():
                         try {
                             errorData = await response.json();
                         } catch (e) {
-                            errorData = { detail: await response.text() || "분석 요청 실패" };
+                            try {
+                                errorData = { detail: await response.text() || "분석 요청 실패" };
+                            } catch (textError) {
+                                errorData = { detail: `HTTP ${response.status}: ${response.statusText}` };
+                            }
                         }
                         console.error("API 오류:", errorData);
-                        throw new Error(errorData.detail || errorData.error || errorData.message || "분석 요청 실패");
+                        const errorMessage = errorData.detail || errorData.error || errorData.message || `HTTP ${response.status}: 분석 요청 실패`;
+                        throw new Error(errorMessage);
                     }
                     
-                    // 스트리밍 응답 읽기
+                    // 스트리밍 응답 읽기 (응답 본문 확인)
+                    if (!response.body) {
+                        throw new Error("스트리밍 응답 본문을 읽을 수 없습니다.");
+                    }
+                    
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
                     let buffer = "";
+                    let hasReceivedData = false;
+                    let streamError = null;
                     
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        
-                        if (done) {
-                            break;
-                        }
-                        
-                        // 디코딩 및 버퍼에 추가
-                        buffer += decoder.decode(value, { stream: true });
-                        
-                        // 줄 단위로 분리하여 처리
-                        const lines = buffer.split("\\n");
-                        buffer = lines.pop() || ""; // 마지막 불완전한 줄은 버퍼에 유지
-                        
-                        for (const line of lines) {
-                            if (!line.trim()) {
-                                continue;
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            
+                            if (done) {
+                                console.log("스트리밍 완료");
+                                break;
                             }
                             
-                            try {
-                                const chunk = JSON.parse(line);
-                                console.log("스트리밍 청크:", chunk);
+                            hasReceivedData = true;
+                            
+                            // 디코딩 및 버퍼에 추가
+                            buffer += decoder.decode(value, { stream: true });
+                            
+                            // 줄 단위로 분리하여 처리 (올바른 줄바꿈 문자 사용)
+                            const lines = buffer.split("\n");
+                            buffer = lines.pop() || ""; // 마지막 불완전한 줄은 버퍼에 유지
+                            
+                            for (const line of lines) {
+                                if (!line.trim()) {
+                                    continue;
+                                }
                                 
-                                // 문장 타입 처리
-                                if (chunk.type === "sentence") {
-                                    const section = chunk.section || "executive_summary";
+                                try {
+                                    const chunk = JSON.parse(line);
+                                    console.log("스트리밍 청크:", chunk);
                                     
-                                    // 섹션이 변경되면 헤더 추가
-                                    if (section !== currentSection) {
-                                        addSectionHeader(section);
-                                        currentSection = section;
+                                    // 문장 타입 처리
+                                    if (chunk.type === "sentence") {
+                                        const section = chunk.section || "executive_summary";
+                                        
+                                        // 섹션이 변경되면 헤더 추가
+                                        if (section !== currentSection) {
+                                            addSectionHeader(section);
+                                            currentSection = section;
+                                        }
+                                        
+                                        // 문장 추가 (실시간 표시)
+                                        resultContent.textContent += chunk.content + " ";
+                                        
+                                        // 스크롤을 맨 아래로
+                                        resultContent.scrollTop = resultContent.scrollHeight;
                                     }
-                                    
-                                    // 문장 추가 (실시간 표시)
-                                    resultContent.textContent += chunk.content + " ";
-                                    
-                                    // 스크롤을 맨 아래로
-                                    resultContent.scrollTop = resultContent.scrollHeight;
+                                    // 진행 상황 처리
+                                    else if (chunk.type === "progress") {
+                                        if (progressBar) {
+                                            progressBar.style.width = chunk.progress + "%";
+                                            progressBar.textContent = chunk.progress + "%";
+                                        }
+                                        if (progressPercentage) {
+                                            progressPercentage.textContent = chunk.progress + "%";
+                                        }
+                                        if (progressStep) {
+                                            progressStep.textContent = chunk.message || "분석 중...";
+                                        }
+                                    }
+                                    // 완료 처리
+                                    else if (chunk.type === "complete") {
+                                        accumulatedResult = chunk.data;
+                                        
+                                        if (progressBar) {
+                                            progressBar.style.width = "100%";
+                                            progressBar.textContent = "100%";
+                                        }
+                                        if (progressPercentage) {
+                                            progressPercentage.textContent = "100%";
+                                        }
+                                        if (progressStep) {
+                                            progressStep.textContent = "분석 완료";
+                                        }
+                                        
+                                        // 최종 결과가 있으면 추가 정보 표시
+                                        if (chunk.data) {
+                                            console.log("최종 결과 수신:", chunk.data);
+                                        }
+                                        
+                                        break;
+                                    }
+                                    // 오류 처리
+                                    else if (chunk.type === "error") {
+                                        streamError = new Error(chunk.message || "알 수 없는 오류가 발생했습니다.");
+                                        throw streamError;
+                                    }
+                                } catch (parseError) {
+                                    // JSON 파싱 오류는 경고만 (스트리밍 중 일부 데이터 손실 가능)
+                                    if (parseError instanceof SyntaxError) {
+                                        console.warn("JSON 파싱 실패 (무시):", line.substring(0, 100), parseError);
+                                    } else {
+                                        // 다른 오류는 재발생
+                                        throw parseError;
+                                    }
                                 }
-                                // 진행 상황 처리
-                                else if (chunk.type === "progress") {
-                                    if (progressBar) {
-                                        progressBar.style.width = chunk.progress + "%";
-                                        progressBar.textContent = chunk.progress + "%";
-                                    }
-                                    if (progressPercentage) {
-                                        progressPercentage.textContent = chunk.progress + "%";
-                                    }
-                                    if (progressStep) {
-                                        progressStep.textContent = chunk.message || "분석 중...";
-                                    }
-                                }
-                                // 완료 처리
-                                else if (chunk.type === "complete") {
-                                    accumulatedResult = chunk.data;
-                                    
-                                    if (progressBar) {
-                                        progressBar.style.width = "100%";
-                                        progressBar.textContent = "100%";
-                                    }
-                                    if (progressPercentage) {
-                                        progressPercentage.textContent = "100%";
-                                    }
-                                    if (progressStep) {
-                                        progressStep.textContent = "분석 완료";
-                                    }
-                                    
-                                    // 최종 결과가 있으면 추가 정보 표시
-                                    if (chunk.data) {
-                                        // 이미 표시된 내용 외에 추가 정보가 있으면 표시
-                                        // (예: key_findings, detailed_analysis 등)
-                                        console.log("최종 결과 수신:", chunk.data);
-                                    }
-                                    
-                                    break;
-                                }
-                                // 오류 처리
-                                else if (chunk.type === "error") {
-                                    throw new Error(chunk.message || "알 수 없는 오류가 발생했습니다.");
-                                }
-                            } catch (parseError) {
-                                console.warn("JSON 파싱 실패:", line, parseError);
                             }
                         }
+                    } catch (streamReadError) {
+                        console.error("스트리밍 읽기 오류:", streamReadError);
+                        if (!streamError) {
+                            streamError = streamReadError;
+                        }
+                    }
+                    
+                    // 스트리밍 중 오류가 발생했거나 데이터를 받지 못한 경우
+                    if (streamError) {
+                        throw streamError;
+                    }
+                    
+                    if (!hasReceivedData) {
+                        throw new Error("서버로부터 데이터를 받지 못했습니다. API 서버 상태를 확인해주세요.");
                     }
                     
                     // 버퍼에 남은 데이터 처리
@@ -1218,13 +1254,38 @@ async def root():
                     }
                     
                     // 기존 코드와의 호환성을 위해 data 변수 설정
-                    const data = accumulatedResult ? {
-                        success: true,
-                        data: accumulatedResult
-                    } : {
-                        success: false,
-                        error: "분석 결과를 받지 못했습니다."
-                    };
+                        let data = null;
+                    
+                    if (accumulatedResult) {
+                        data = {
+                            success: true,
+                            data: accumulatedResult
+                        };
+                        console.log("최종 분석 결과 수신:", Object.keys(accumulatedResult));
+                    } else {
+                        // accumulatedResult가 없지만 resultContent에 텍스트가 있는 경우
+                        const displayedText = resultContent.textContent || "";
+                        if (displayedText.trim().length > 0) {
+                            // 표시된 텍스트가 있으면 최소한의 결과 구조 생성
+                            data = {
+                                success: true,
+                                data: {
+                                    executive_summary: displayedText,
+                                    target_keyword: formData.target_keyword,
+                                    target_type: formData.target_type,
+                                    note: "스트리밍 결과가 완전히 수신되지 않았지만 일부 내용은 표시되었습니다."
+                                }
+                            };
+                            console.log("부분 결과 사용 (텍스트만 수신)");
+                        } else {
+                            // 아무것도 받지 못한 경우
+                            data = {
+                                success: false,
+                                error: "분석 결과를 받지 못했습니다. 서버 로그를 확인하거나 잠시 후 다시 시도해주세요."
+                            };
+                            console.error("분석 결과 없음 - accumulatedResult와 displayedText 모두 비어있음");
+                        }
+                    }
                     
                     console.log("최종 분석 결과:", data);
                     
@@ -1248,7 +1309,7 @@ async def root():
                         }
                     }
                     
-                    if (data.success && data.data) {
+                    if (data && data.success && data.data) {
                         // 결과를 Markdown 형식으로 포맷팅
                         let resultText = "";
                         let analysisData = null;
@@ -2322,16 +2383,33 @@ async def root():
                         resultContent.textContent = resultText;
                         resultSection.classList.add("show");
                         emptyState.style.display = "none";
-                    } else {
-                        throw new Error("분석 결과를 받지 못했습니다.");
+                    } else if (data && !data.success) {
+                        // 에러가 있는 경우 에러 메시지 표시
+                        throw new Error(data.error || "분석 결과를 받지 못했습니다.");
+                    } else if (!data) {
+                        // data가 null인 경우
+                        throw new Error("분석 결과를 받지 못했습니다. 서버 상태를 확인해주세요.");
                     }
                 } catch (err) {
-                    error.textContent = "오류: " + err.message;
+                    console.error("분석 요청 오류:", err);
+                    error.textContent = "오류: " + (err.message || "알 수 없는 오류가 발생했습니다.");
                     error.classList.add("show");
                     emptyState.style.display = "none";
+                    resultSection.classList.remove("show");
+                    
+                    // 진행률 표시 숨기기
+                    if (progressContainer) {
+                        progressContainer.style.display = "none";
+                    }
                 } finally {
                     loading.classList.remove("show");
                     analyzeBtn.disabled = false;
+                    
+                    // 진행률 인터벌 정리 (혹시 남아있을 수 있음)
+                    if (typeof progressInterval !== 'undefined' && progressInterval !== null) {
+                        clearInterval(progressInterval);
+                        progressInterval = null;
+                    }
                 }
             });
         </script>
