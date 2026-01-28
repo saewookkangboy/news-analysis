@@ -8,8 +8,8 @@ interface ErrorMessageProps {
 
 const ErrorMessage: React.FC<ErrorMessageProps> = memo(({ error, onRetry, showRetry = false }) => {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 p-8 bg-white border border-black rounded-lg max-w-md mx-auto">
-      <div className="flex items-center justify-center w-12 h-12 mb-2 rounded-full bg-red-50">
+    <div className="flat-card flex flex-col items-center justify-center gap-4 p-8 max-w-md mx-auto">
+      <div className="flex items-center justify-center w-12 h-12 mb-2 rounded-full bg-red-50 border border-red-200">
         <svg
           className="w-6 h-6 text-red-600"
           fill="none"
@@ -25,17 +25,17 @@ const ErrorMessage: React.FC<ErrorMessageProps> = memo(({ error, onRetry, showRe
           />
         </svg>
       </div>
-      <h3 className="text-base font-semibold text-black ibm-plex-sans-kr-semibold">
+      <h3 className="flat-heading-3 text-gray-900">
         오류가 발생했습니다
       </h3>
-      <p className="text-sm text-black/70 text-center ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.42px' }}>
+      <p className="flat-caption text-center text-gray-600">
         {error}
       </p>
       {showRetry && onRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="px-6 py-2 text-sm font-medium text-white bg-black border border-black rounded-lg hover:bg-gray-800 ibm-plex-sans-kr-medium transition-colors focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
+          className="flat-btn flat-btn-primary"
           aria-label="다시 시도"
         >
           다시 시도

@@ -59,17 +59,17 @@ const Navigation: React.FC = () => {
   }, [location.pathname]);
 
   return (
-    <nav className="bg-white border-b border-black flex-shrink-0 sticky top-0 z-50 backdrop-blur-sm bg-white/95">
-      <div className="px-6">
+    <nav className="flat-nav flex-shrink-0 sticky top-0 z-50 bg-white">
+      <div className="px-4 sm:px-6">
         <div className="flex justify-between items-center h-16">
           {/* 로고 */}
           <div className="flex items-center">
-            <h1 className="text-xl font-semibold text-black tracking-tight ibm-plex-sans-kr-semibold" style={{ letterSpacing: '-0.8px' }}>
+            <h1 className="flat-heading-3 text-gray-900 font-semibold">
               고객 행동 분석
             </h1>
           </div>
 
-          {/* 네비게이션 메뉴 */}
+          {/* 네비게이션 메뉴 - Desktop */}
           <div className="hidden md:block">
             <div className="flex items-center space-x-2">
               {navigation.map((item) => {
@@ -78,12 +78,9 @@ const Navigation: React.FC = () => {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ibm-plex-sans-kr-medium focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 ${
-                      isActive
-                        ? 'bg-black text-white scale-105'
-                        : 'text-black hover:bg-black hover:text-white hover:scale-105'
+                    className={`flat-nav-link ${
+                      isActive ? 'active' : ''
                     }`}
-                    style={{ letterSpacing: '-0.42px' }}
                     aria-current={isActive ? 'page' : undefined}
                   >
                     <item.icon className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -94,13 +91,13 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          {/* 모바일 메뉴 버튼 */}
+          {/* 모바일 메뉴 버튼 - Flat Design */}
           <div className="md:hidden">
             <button
               ref={buttonRef}
               type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="inline-flex items-center justify-center p-2 rounded-lg text-black hover:bg-black hover:text-white focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
+              className="flat-btn flat-btn-secondary p-2 min-h-auto"
               aria-expanded={isMobileMenuOpen}
               aria-controls="mobile-menu"
               aria-label={isMobileMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
@@ -114,12 +111,12 @@ const Navigation: React.FC = () => {
           </div>
         </div>
 
-        {/* 모바일 메뉴 */}
+        {/* 모바일 메뉴 - Flat Design */}
         {isMobileMenuOpen && (
           <div
             ref={menuRef}
             id="mobile-menu"
-            className="md:hidden border-t border-black bg-white"
+            className="md:hidden border-t border-gray-200 bg-white"
             role="menu"
             aria-label="모바일 네비게이션 메뉴"
           >
@@ -130,12 +127,9 @@ const Navigation: React.FC = () => {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 ibm-plex-sans-kr-medium ${
-                      isActive
-                        ? 'bg-black text-white'
-                        : 'text-black hover:bg-black hover:text-white'
+                    className={`flat-nav-link w-full justify-start ${
+                      isActive ? 'active' : ''
                     }`}
-                    style={{ letterSpacing: '-0.42px' }}
                     role="menuitem"
                     aria-current={isActive ? 'page' : undefined}
                     onClick={() => setIsMobileMenuOpen(false)}

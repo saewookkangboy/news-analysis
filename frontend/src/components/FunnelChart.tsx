@@ -13,7 +13,7 @@ const FunnelChart: React.FC<FunnelChartProps> = memo(({ data }) => {
 
   if (!data || data.length === 0) {
     return (
-      <div className="py-8 text-center text-sm text-black/60 ibm-plex-sans-kr-regular">
+      <div className="py-8 text-center flat-caption text-gray-500">
         퍼널 데이터가 없습니다.
       </div>
     );
@@ -23,15 +23,15 @@ const FunnelChart: React.FC<FunnelChartProps> = memo(({ data }) => {
     <div className="space-y-3">
       {data.map((step, i) => (
         <div key={step.step}>
-          <div className="flex justify-between text-xs mb-1 ibm-plex-sans-kr-medium">
+          <div className="flex justify-between text-xs mb-1 font-medium text-gray-700">
             <span>{step.step}</span>
             <span>
               {step.count.toLocaleString()} ({step.percentage}%)
             </span>
           </div>
-          <div className="h-6 bg-black/5 rounded overflow-hidden">
+          <div className="flat-progress h-6">
             <div
-              className="h-full bg-black rounded transition-all duration-300"
+              className="flat-progress-bar h-full bg-blue-600 transition-all duration-300"
               style={{ width: `${(step.count / maxCount) * 100}%` }}
             />
           </div>

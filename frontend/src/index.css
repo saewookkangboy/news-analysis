@@ -3,26 +3,28 @@
 @tailwind utilities;
 
 /* 폰트 Preconnect - 성능 최적화 */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@100;200;300;400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Nanum+Gothic&family=Noto+Sans+KR:wght@100..900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@100;200;300;400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Nanum+Gothic&family=Noto+Sans+KR:wght@100..900&display=swap');
+
+/* Flat Design System */
+@import './styles/flat-design.css';
 
 /* ============================================
    최종 디자인 템플릿 - 블랙/화이트 미니멀 테마
    Marketing Website Template 스타일 반영
    ============================================ */
 
-/* 기본 스타일 - 한글 폰트 우선 적용 */
+/* 기본 스타일 - Flat Design with Inter font */
 body {
   margin: 0;
-  font-family: 'IBM Plex Sans KR', 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #ffffff;
-  color: #000000;
-  letter-spacing: -0.48px;
-  line-height: 1.6;
+  background-color: #FFFFFF;
+  color: #111827;
+  line-height: 1.5;
 }
 
 code {
@@ -193,15 +195,16 @@ code {
   animation: scaleOut 0.2s ease;
 }
 
-/* 카드 스타일 - 블랙/화이트 테마 (Marketing Template 스타일) */
+/* 카드 스타일 - Flat Design (No shadows, 1px border only) */
 .dashboard-card {
-  @apply bg-white rounded-lg border border-black p-6 transition-all duration-200;
-  letter-spacing: -0.48px;
+  @apply bg-white border border-gray-200 p-6 transition-colors duration-200;
+  border-radius: 4px;
+  /* No box-shadow, no transform on hover */
 }
 
 .dashboard-card:hover {
-  @apply border-black;
-  transform: translateY(-2px);
+  @apply bg-gray-50 border-blue-500;
+  /* No transform, no elevation */
 }
 
 /* 메트릭 카드 - 개선된 타이포그래피 */
@@ -293,30 +296,22 @@ code {
   @apply overflow-x-auto;
 }
 
-/* 버튼 스타일 - Marketing Template 스타일 */
+/* 버튼 스타일 - Flat Design (Solid colors, no shadows) */
 .btn {
-  @apply inline-flex items-center px-4 py-2 border text-sm font-medium rounded-lg focus:outline-none transition-all duration-200;
-  letter-spacing: -0.42px;
-  line-height: 1.25rem;
-  font-family: "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
+  @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded focus:outline-none transition-colors duration-200;
+  min-height: 44px; /* Touch-friendly */
+  font-family: "Inter", "IBM Plex Sans KR", "Noto Sans KR", sans-serif;
+  /* No box-shadow, no transform */
 }
 
 .btn-primary {
-  @apply btn bg-black text-white border-black hover:bg-gray-900;
-  transform: translateY(0);
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
+  @apply btn bg-blue-600 text-white border border-blue-600 hover:bg-blue-700;
+  /* No transform on hover */
 }
 
 .btn-secondary {
-  @apply btn bg-white text-black border-black hover:bg-black hover:text-white;
-  transform: translateY(0);
-}
-
-.btn-secondary:hover {
-  transform: translateY(-1px);
+  @apply btn bg-white text-gray-900 border border-gray-300 hover:bg-gray-50;
+  /* No transform on hover */
 }
 
 .btn-success {

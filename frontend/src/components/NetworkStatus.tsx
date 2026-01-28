@@ -22,7 +22,7 @@ const NetworkStatus: React.FC = () => {
 
   return (
     <div 
-      className="bg-yellow-500 text-black text-center py-2 px-4 text-sm ibm-plex-sans-kr-medium"
+      className="bg-yellow-400 text-gray-900 text-center py-2 px-4 text-sm font-medium border-b border-yellow-500"
       role="alert"
       aria-live="assertive"
       aria-atomic="true"

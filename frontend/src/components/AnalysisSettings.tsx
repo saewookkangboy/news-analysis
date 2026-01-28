@@ -32,19 +32,19 @@ const AnalysisSettings: React.FC<AnalysisSettingsProps> = ({
 
   return (
     <div className="h-full flex flex-col animate-fade-in">
-      {/* 헤더 */}
-      <div className="mb-6 pb-4 border-b border-black">
-        <h2 className="text-lg font-semibold text-black mb-1 tracking-tight ibm-plex-sans-kr-semibold" style={{ letterSpacing: '-0.72px' }}>
+      {/* 헤더 - Flat Design */}
+      <div className="mb-6 pb-4 border-b border-gray-200">
+        <h2 className="flat-heading-3 mb-1">
           분석 설정
         </h2>
-        <p className="text-xs text-black ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.36px' }}>
+        <p className="flat-caption">
           카테고리와 옵션을 선택하세요
         </p>
       </div>
 
-      {/* 카테고리 선택 */}
+      {/* 카테고리 선택 - Flat Design */}
       <div className="mb-6">
-        <label className="block text-xs font-medium text-black mb-3 uppercase tracking-wide ibm-plex-sans-kr-medium">
+        <label className="flat-caption block mb-3 font-medium uppercase tracking-wide text-gray-700">
           카테고리 선택
         </label>
         <div className="space-y-2">
@@ -52,18 +52,17 @@ const AnalysisSettings: React.FC<AnalysisSettingsProps> = ({
             <button
               key={category.value}
               onClick={() => onCategoryChange(category.value as CategoryType)}
-              className={`w-full text-left p-3 rounded-lg border transition-all duration-200 ibm-plex-sans-kr-regular ${
+              className={`w-full text-left p-3 rounded border transition-colors duration-200 ${
                 selectedCategory === category.value
-                  ? 'border-black bg-black text-white scale-105'
-                  : 'border-black bg-white text-black hover:bg-black hover:text-white hover:scale-105'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-gray-200 bg-white text-gray-900 hover:bg-gray-50 hover:border-blue-500'
               }`}
               style={{ 
-                animationDelay: `${index * 50}ms`,
-                letterSpacing: '-0.42px'
+                animationDelay: `${index * 50}ms`
               }}
             >
-              <div className="font-medium text-sm mb-0.5 ibm-plex-sans-kr-medium">{category.label}</div>
-              <div className="text-xs opacity-75 ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.36px' }}>
+              <div className="font-medium text-sm mb-0.5">{category.label}</div>
+              <div className="text-xs opacity-75">
                 {category.description}
               </div>
             </button>
@@ -71,19 +70,19 @@ const AnalysisSettings: React.FC<AnalysisSettingsProps> = ({
         </div>
       </div>
 
-      {/* 현재 선택된 카테고리 정보 */}
-      <div className="mb-6 p-3 bg-white rounded-lg border border-black">
-        <div className="text-xs text-black mb-1 ibm-plex-sans-kr-regular">현재 선택</div>
-        <div className="text-sm font-medium text-black ibm-plex-sans-kr-semibold">
+      {/* 현재 선택된 카테고리 정보 - Flat Design */}
+      <div className="mb-6 p-3 flat-card">
+        <div className="flat-caption mb-1">현재 선택</div>
+        <div className="text-sm font-medium text-gray-900">
           {getCategoryTitle(selectedCategory)}
         </div>
       </div>
 
-      {/* 관리자 패널 토글 */}
-      <div className="mt-auto pt-4 border-t border-black">
+      {/* 관리자 패널 토글 - Flat Design */}
+      <div className="mt-auto pt-4 border-t border-gray-200">
         <button
           onClick={onToggleAdminPanel}
-          className="w-full px-3 py-2 text-xs font-medium text-black bg-white border border-black rounded-lg hover:bg-black hover:text-white transition-all duration-200 ibm-plex-sans-kr-medium hover:translate-y-[-1px]"
+          className="flat-btn flat-btn-secondary w-full"
         >
           {showAdminPanel ? '관리자 패널 숨기기' : '관리자 패널 보기'}
         </button>

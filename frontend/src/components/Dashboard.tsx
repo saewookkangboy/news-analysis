@@ -243,9 +243,9 @@ const Dashboard: React.FC = React.memo(() => {
 
   return (
     <div className="min-h-full flex flex-col lg:flex-row bg-white" role="main" aria-label="대시보드">
-      {/* 좌측: 분석 설정 패널 */}
+      {/* 좌측: 분석 설정 패널 - Flat Design */}
       <aside 
-        className="w-full lg:w-80 xl:w-96 bg-white border-r border-black p-4 sm:p-6 overflow-y-auto custom-scrollbar"
+        className="w-full lg:w-80 xl:w-96 bg-white border-r border-gray-200 p-4 sm:p-6 overflow-y-auto custom-scrollbar"
         aria-label="분석 설정"
       >
         <AnalysisSettings
@@ -259,12 +259,12 @@ const Dashboard: React.FC = React.memo(() => {
       {/* 우측: 분석 결과 패널 */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar" aria-label="분석 결과">
         <div className="space-y-6 max-w-7xl mx-auto">
-          {/* 페이지 헤더 */}
+          {/* 페이지 헤더 - Flat Design */}
           <header className="mb-6 animate-fade-in">
-            <h1 className="text-xl sm:text-2xl font-semibold text-black mb-1 tracking-tight ibm-plex-sans-kr-bold" style={{ letterSpacing: '-1.04px' }}>
+            <h1 className="flat-heading-2 mb-1">
               분석 결과
             </h1>
-            <p className="text-xs sm:text-sm text-black ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.42px' }}>
+            <p className="flat-caption">
               {categoryTitle} 고객 여정과 퍼널 분석을 통한 실시간 인사이트
             </p>
           </header>
@@ -282,8 +282,8 @@ const Dashboard: React.FC = React.memo(() => {
             metrics={dashboardData.category_metrics} 
           />
 
-      {/* 개요 메트릭 */}
-      <section aria-label="개요 메트릭" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      {/* 개요 메트릭 - Flat Design Grid */}
+      <section aria-label="개요 메트릭" className="flat-grid">
         <MetricCard
           title="총 사용자"
           value={(dashboardData.overview.total_users ?? 0).toLocaleString()}

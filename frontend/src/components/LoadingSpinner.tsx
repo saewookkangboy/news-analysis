@@ -15,11 +15,11 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = memo(({ size = 'medium', t
   return (
     <div className="flex flex-col items-center justify-center gap-3" role="status" aria-live="polite">
       <div
-        className={`animate-spin rounded-full border-black border-t-transparent ${sizeClasses[size]}`}
+        className={`animate-spin rounded-full border-blue-600 border-t-transparent ${sizeClasses[size]}`}
         aria-label="로딩 중"
       />
       {text && (
-        <p className="text-sm text-black ibm-plex-sans-kr-regular" style={{ letterSpacing: '-0.36px' }}>
+        <p className="flat-caption text-gray-600">
           {text}
         </p>
       )}
