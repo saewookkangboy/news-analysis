@@ -793,6 +793,49 @@ async def root():
         </div>
         
         <script>
+            // 브라우저 확장 프로그램 오류 필터링 (앱 기능에 영향 없음)
+            window.addEventListener("unhandledrejection", function(event) {
+                const error = event.reason;
+                const errorMessage = error?.message || error?.toString() || '';
+                
+                // 무시해도 되는 브라우저 확장 프로그램 오류 패턴
+                const ignoredPatterns = [
+                    /message channel closed/i,
+                    /asynchronous response/i,
+                    /Extension context invalidated/i,
+                    /Receiving end does not exist/i,
+                    /liner-core/i,
+                    /Violation/i
+                ];
+                
+                // 무시해도 되는 오류는 기본 동작 방지
+                if (ignoredPatterns.some(pattern => pattern.test(errorMessage))) {
+                    event.preventDefault();
+                    return;
+                }
+            });
+            
+            // 일반 오류 핸들러 (브라우저 확장 프로그램 오류 필터링)
+            window.addEventListener("error", function(event) {
+                const errorMessage = event.message || '';
+                
+                // 무시해도 되는 브라우저 확장 프로그램 오류 패턴
+                const ignoredPatterns = [
+                    /message channel closed/i,
+                    /asynchronous response/i,
+                    /Extension context invalidated/i,
+                    /Receiving end does not exist/i,
+                    /liner-core/i,
+                    /Violation/i
+                ];
+                
+                // 무시해도 되는 오류는 기본 동작 방지
+                if (ignoredPatterns.some(pattern => pattern.test(errorMessage))) {
+                    event.preventDefault();
+                    return true;
+                }
+            }, true);
+            
             // 기본 날짜 설정 (최근 3개월) 및 URL 파라미터 처리
             window.addEventListener("DOMContentLoaded", function() {
                 const today = new Date();
@@ -2367,8 +2410,8 @@ async def root():
                             resultText += "**디버깅 정보**:\\n" ;
                             resultText += "- 받은 데이터 타입: " + (typeof data.data) + "\\n" ;
                             resultText += "- analysisData 타입: " + (typeof analysisData) + "\\n" ;
-                            resultText += "- analysisData 키: " + (Object.keys(analysisData || {) + ").join(', ')}\\n" ;
-                            resultText += "- data.data 키: " + (Object.keys(data.data || {) + ").join(', ')}\\n\\n" ;
+                            resultText += "- analysisData 키: " + Object.keys(analysisData || {}).join(', ') + "\\n" ;
+                            resultText += "- data.data 키: " + Object.keys(data.data || {}).join(', ') + "\\n\\n" ;
                             resultText += "**전체 응답 구조**:\\n" ;
                             resultText += "```json\\n" + JSON.stringify({success: data.success, dataKeys: Object.keys(data.data || {}), analysisDataKeys: Object.keys(analysisData || {})}, null, 2) + "\\n```\\n\\n";
                             resultText += "**해결 방법**:\\n" ;
