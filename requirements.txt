@@ -31,3 +31,4 @@ psutil==5.9.6  # 시스템 모니터링 (선택적)
 # Development (optional for Vercel)
 pytest==7.4.3
 pytest-asyncio==0.21.1
+pytest-cov==4.1.0  # 테스트 커버리지 측정

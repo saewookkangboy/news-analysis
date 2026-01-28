@@ -1,6 +1,10 @@
 """
 Vercel Serverless Function Entry Point
 FastAPI 앱을 Vercel에서 실행하기 위한 진입점
+
+Vercel 함수 설정:
+- maxDuration: 60초
+- memory: 3008MB
 """
 import sys
 import os

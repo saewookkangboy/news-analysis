@@ -265,14 +265,10 @@ async def analyze_target_endpoint(
             remove_progress_tracker(progress_tracker.task_id)
         raise
     except Exception as e:
-        logger.error(f"타겟 분석 중 오류: {e}")
         # 오류 발생 시에도 progress tracker 정리
         if 'progress_tracker' in locals() and progress_tracker:
             remove_progress_tracker(progress_tracker.task_id)
-        raise HTTPException(
-            status_code=500,
-            detail=f"타겟 분석 실패: {str(e)}"
-        )
+        raise handle_api_error(e, "타겟 분석")
 
 
 @router.get("/target/analyze")

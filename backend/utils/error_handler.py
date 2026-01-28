@@ -174,22 +174,34 @@ def validate_target_type(target_type: str) -> None:
 
 def validate_date_format(date_str: Optional[str], field_name: str = "date") -> None:
     """
-    날짜 형식 검증 (YYYY-MM-DD)
+    날짜 형식 및 유효성 검증 (YYYY-MM-DD)
     
     Args:
         date_str: 검증할 날짜 문자열
         field_name: 필드 이름
         
     Raises:
-        ValidationError: 유효하지 않은 날짜 형식인 경우
+        ValidationError: 유효하지 않은 날짜 형식 또는 유효하지 않은 날짜인 경우
     """
     if date_str is None:
         return
     
     import re
+    from datetime import datetime
+    
+    # 형식 검증 (YYYY-MM-DD)
     date_pattern = r'^\d{4}-\d{2}-\d{2}$'
     if not re.match(date_pattern, date_str):
         raise ValidationError(
             f"{field_name}는 YYYY-MM-DD 형식이어야 합니다. (예: 2026-01-28)",
+            field=field_name
+        )
+    
+    # 유효한 날짜인지 검증
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        raise ValidationError(
+            f"{field_name}는 유효한 날짜여야 합니다. (예: 2026-01-28, 잘못된 예: 2025-13-01)",
             field=field_name
         )
