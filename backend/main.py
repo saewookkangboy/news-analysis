@@ -1470,17 +1470,27 @@ async def root():
                         resultText += "**분석 일시**: " + new Date().toLocaleString("ko-KR") + "\\n\\n";
                         resultText += "---\\n\\n";
                         
-                        // 한글 키 매핑 함수 (오디언스 분석용)
-                        function mapKoreanKeys(data) {
+                        // 키 매핑 함수 (한글/영문 키 모두 지원)
+                        function mapKeys(data) {
                             if (!data || typeof data !== "object") return data;
                             
                             const mapped = { ...data };
                             
-                            // 한글 키 -> 영문 키 매핑
-                            const keyMapping = {
+                            // 영문 키 -> snake_case 키 매핑
+                            const englishKeyMapping = {
                                 "Executive Summary": "executive_summary",
-                                "분석 개요": "analysis_overview",
+                                "Analysis Overview": "analysis_overview",
                                 "Key Insights": "key_insights",
+                                "Audience Detailed Analysis": "detailed_audience_analysis",
+                                "Strategic Recommendations": "strategic_recommendations",
+                                "Execution Roadmap": "execution_roadmap",
+                                "Risks & Governance": "risk_governance",
+                                "Appendix": "appendix"
+                            };
+                            
+                            // 한글 키 -> 영문 키 매핑
+                            const koreanKeyMapping = {
+                                "분석 개요": "analysis_overview",
                                 "오디언스 상세 분석": "detailed_audience_analysis",
                                 "전략 제안": "strategic_recommendations",
                                 "실행 로드맵": "execution_roadmap",
@@ -1488,10 +1498,20 @@ async def root():
                                 "부록": "appendix"
                             };
                             
+                            // 영문 키를 snake_case로 매핑
+                            Object.keys(englishKeyMapping).forEach(englishKey => {
+                                if (mapped[englishKey] !== undefined) {
+                                    const snakeKey = englishKeyMapping[englishKey];
+                                    if (!mapped[snakeKey]) {
+                                        mapped[snakeKey] = mapped[englishKey];
+                                    }
+                                }
+                            });
+                            
                             // 한글 키를 영문 키로 매핑
-                            Object.keys(keyMapping).forEach(koreanKey => {
+                            Object.keys(koreanKeyMapping).forEach(koreanKey => {
                                 if (mapped[koreanKey] !== undefined) {
-                                    const englishKey = keyMapping[koreanKey];
+                                    const englishKey = koreanKeyMapping[koreanKey];
                                     if (!mapped[englishKey]) {
                                         mapped[englishKey] = mapped[koreanKey];
                                     }
@@ -1503,21 +1523,16 @@ async def root():
                         
                         // 오디언스 분석인 경우 특별한 포맷팅 (MECE 구조 지원)
                         if (targetType === "audience" && analysisData) {
-                            // 한글 키 매핑 적용
-                            analysisData = mapKoreanKeys(analysisData);
+                            // 키 매핑 적용 (영문/한글 키 모두 지원)
+                            analysisData = mapKeys(analysisData);
                             
-                            // Executive Summary (중복 제거) - 한글 키 지원
+                            // Executive Summary (중복 제거) - 영문/한글 키 모두 지원
                             let executiveSummary = null;
                             if (analysisData.executive_summary) {
                                 executiveSummary = analysisData.executive_summary;
                             } else if (analysisData.summary) {
                                 executiveSummary = analysisData.summary;
                             } else if (analysisData["Executive Summary"]) {
-                                executiveSummary = analysisData["Executive Summary"];
-                            }
-                            
-                            // 한글 키가 있는 경우 직접 처리 (영문 키가 없을 때)
-                            if (!executiveSummary && analysisData["Executive Summary"]) {
                                 executiveSummary = analysisData["Executive Summary"];
                             }
                             
@@ -1549,7 +1564,7 @@ async def root():
                                 }
                             }
                             
-                            // Key Findings 또는 Key Insights 처리 (한글 키 지원)
+                            // Key Findings 또는 Key Insights 처리 (영문/한글 키 모두 지원)
                             const keyFindings = analysisData.key_findings || 
                                                analysisData.key_insights || 
                                                analysisData["Key Insights"];
@@ -1641,9 +1656,10 @@ async def root():
                                 resultText += "\\n" ;
                             }
                             
-                            // Detailed Analysis (한글 키 지원)
+                            // Detailed Analysis (영문/한글 키 모두 지원)
                             const detailedAnalysis = analysisData.detailed_analysis || 
                                                      analysisData.detailed_audience_analysis || 
+                                                     analysisData["Audience Detailed Analysis"] ||
                                                      analysisData["오디언스 상세 분석"];
                             const insights = detailedAnalysis?.insights || analysisData.insights;
                             
@@ -1818,8 +1834,9 @@ async def root():
                                 }
                             }
                             
-                            // Strategic Recommendations (한글 키 지원)
+                            // Strategic Recommendations (영문/한글 키 모두 지원)
                             const strategicRecs = analysisData.strategic_recommendations || 
+                                                  analysisData["Strategic Recommendations"] ||
                                                   analysisData["전략 제안"];
                             if (strategicRecs) {
                                 resultText += "## 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
@@ -2010,8 +2027,9 @@ async def root():
                                 }
                             }
                             
-                            // Strategic Recommendations (한글 키 지원)
+                            // Strategic Recommendations (영문/한글 키 모두 지원)
                             const strategicRecs = analysisData.strategic_recommendations || 
+                                                  analysisData["Strategic Recommendations"] ||
                                                   analysisData["전략 제안"];
                             if (strategicRecs) {
                                 resultText += "## 전략적 권장사항 (Strategic Recommendations)\\n\\n" ;
@@ -2487,11 +2505,33 @@ async def root():
                             resultText += "\\n" ;
                         }
                         
-                        // 한글 키가 있는 경우 직접 처리 (오디언스 분석)
+                        // 영문/한글 키가 있는 경우 직접 처리 (오디언스 분석)
                         if (targetType === "audience" && analysisData && !resultText.includes("Executive Summary") && !resultText.includes("주요 발견사항")) {
-                            // 한글 키로 직접 데이터 표시
+                            // 영문/한글 키로 직접 데이터 표시
                             if (analysisData["Executive Summary"]) {
                                 resultText += "## Executive Summary\\n\\n" + (analysisData["Executive Summary"]) + "\\n\\n";
+                            }
+                            if (analysisData["Analysis Overview"]) {
+                                resultText += "## Analysis Overview\\n\\n";
+                                const overview = analysisData["Analysis Overview"];
+                                if (typeof overview === "object") {
+                                    Object.keys(overview).forEach(key => {
+                                        if (overview[key]) {
+                                            if (typeof overview[key] === "object") {
+                                                resultText += "### " + key + "\\n\\n";
+                                                Object.keys(overview[key]).forEach(subKey => {
+                                                    resultText += "- **" + subKey + "**: " + (typeof overview[key][subKey] === "object" ? JSON.stringify(overview[key][subKey], null, 2) : overview[key][subKey]) + "\\n";
+                                                });
+                                                resultText += "\\n";
+                                            } else {
+                                                resultText += "- **" + key + "**: " + overview[key] + "\\n";
+                                            }
+                                        }
+                                    });
+                                    resultText += "\\n";
+                                } else {
+                                    resultText += overview + "\\n\\n";
+                                }
                             }
                             if (analysisData["분석 개요"]) {
                                 resultText += "## 분석 개요\\n\\n";
@@ -2547,6 +2587,51 @@ async def root():
                                     resultText += insights + "\\n\\n";
                                 }
                             }
+                            if (analysisData["Audience Detailed Analysis"]) {
+                                resultText += "## Audience Detailed Analysis\\n\\n";
+                                const detailed = analysisData["Audience Detailed Analysis"];
+                                if (typeof detailed === "object") {
+                                    Object.keys(detailed).forEach(key => {
+                                        if (detailed[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof detailed[key] === "object" && !Array.isArray(detailed[key])) {
+                                                Object.keys(detailed[key]).forEach(subKey => {
+                                                    const value = detailed[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            resultText += "- **" + subKey + "**:\\n";
+                                                            value.forEach((item, idx) => {
+                                                                if (typeof item === "object") {
+                                                                    resultText += "  " + (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
+                                                                } else {
+                                                                    resultText += "  " + (idx + 1) + ". " + item + "\\n";
+                                                                }
+                                                            });
+                                                        } else if (typeof value === "object") {
+                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else if (Array.isArray(detailed[key])) {
+                                                detailed[key].forEach((item, idx) => {
+                                                    if (typeof item === "object") {
+                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
+                                                    } else {
+                                                        resultText += (idx + 1) + ". " + item + "\\n";
+                                                    }
+                                                });
+                                            } else {
+                                                resultText += detailed[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += detailed + "\\n\\n";
+                                }
+                            }
                             if (analysisData["오디언스 상세 분석"]) {
                                 resultText += "## 오디언스 상세 분석\\n\\n";
                                 const detailed = analysisData["오디언스 상세 분석"];
@@ -2592,6 +2677,42 @@ async def root():
                                     resultText += detailed + "\\n\\n";
                                 }
                             }
+                            if (analysisData["Strategic Recommendations"]) {
+                                resultText += "## Strategic Recommendations\\n\\n";
+                                const strategy = analysisData["Strategic Recommendations"];
+                                if (typeof strategy === "object") {
+                                    Object.keys(strategy).forEach(key => {
+                                        if (strategy[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof strategy[key] === "object" && !Array.isArray(strategy[key])) {
+                                                Object.keys(strategy[key]).forEach(subKey => {
+                                                    const value = strategy[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            value.forEach((item, idx) => {
+                                                                resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
+                                                            });
+                                                        } else if (typeof value === "object") {
+                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else if (Array.isArray(strategy[key])) {
+                                                strategy[key].forEach((item, idx) => {
+                                                    resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
+                                                });
+                                            } else {
+                                                resultText += strategy[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += strategy + "\\n\\n";
+                                }
+                            }
                             if (analysisData["전략 제안"]) {
                                 resultText += "## 전략 제안\\n\\n";
                                 const strategy = analysisData["전략 제안"];
@@ -2628,6 +2749,37 @@ async def root():
                                     resultText += strategy + "\\n\\n";
                                 }
                             }
+                            if (analysisData["Execution Roadmap"]) {
+                                resultText += "## Execution Roadmap\\n\\n";
+                                const roadmap = analysisData["Execution Roadmap"];
+                                if (typeof roadmap === "object") {
+                                    Object.keys(roadmap).forEach(key => {
+                                        if (roadmap[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof roadmap[key] === "object") {
+                                                Object.keys(roadmap[key]).forEach(subKey => {
+                                                    const value = roadmap[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            resultText += "- **" + subKey + "**:\\n";
+                                                            value.forEach((item, idx) => {
+                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
+                                                            });
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else {
+                                                resultText += roadmap[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += roadmap + "\\n\\n";
+                                }
+                            }
                             if (analysisData["실행 로드맵"]) {
                                 resultText += "## 실행 로드맵\\n\\n";
                                 const roadmap = analysisData["실행 로드맵"];
@@ -2657,6 +2809,41 @@ async def root():
                                     });
                                 } else {
                                     resultText += roadmap + "\\n\\n";
+                                }
+                            }
+                            if (analysisData["Risks & Governance"]) {
+                                resultText += "## Risks & Governance\\n\\n";
+                                const risk = analysisData["Risks & Governance"];
+                                if (typeof risk === "object") {
+                                    Object.keys(risk).forEach(key => {
+                                        if (risk[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (typeof risk[key] === "object" && !Array.isArray(risk[key])) {
+                                                Object.keys(risk[key]).forEach(subKey => {
+                                                    const value = risk[key][subKey];
+                                                    if (value) {
+                                                        if (Array.isArray(value)) {
+                                                            resultText += "- **" + subKey + "**:\\n";
+                                                            value.forEach((item, idx) => {
+                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
+                                                            });
+                                                        } else {
+                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
+                                                        }
+                                                    }
+                                                });
+                                            } else if (Array.isArray(risk[key])) {
+                                                risk[key].forEach((item, idx) => {
+                                                    resultText += (idx + 1) + ". " + item + "\\n";
+                                                });
+                                            } else {
+                                                resultText += risk[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += risk + "\\n\\n";
                                 }
                             }
                             if (analysisData["리스크 & 거버넌스"]) {
@@ -2694,6 +2881,33 @@ async def root():
                                     resultText += risk + "\\n\\n";
                                 }
                             }
+                            if (analysisData["Appendix"]) {
+                                resultText += "## Appendix\\n\\n";
+                                const appendix = analysisData["Appendix"];
+                                if (typeof appendix === "object") {
+                                    Object.keys(appendix).forEach(key => {
+                                        if (appendix[key]) {
+                                            resultText += "### " + key + "\\n\\n";
+                                            if (Array.isArray(appendix[key])) {
+                                                appendix[key].forEach((item, idx) => {
+                                                    if (typeof item === "object") {
+                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
+                                                    } else {
+                                                        resultText += (idx + 1) + ". " + item + "\\n";
+                                                    }
+                                                });
+                                            } else if (typeof appendix[key] === "object") {
+                                                resultText += JSON.stringify(appendix[key], null, 2) + "\\n";
+                                            } else {
+                                                resultText += appendix[key] + "\\n";
+                                            }
+                                            resultText += "\\n";
+                                        }
+                                    });
+                                } else {
+                                    resultText += appendix + "\\n\\n";
+                                }
+                            }
                             if (analysisData["부록"]) {
                                 resultText += "## 부록\\n\\n";
                                 const appendix = analysisData["부록"];
@@ -2728,8 +2942,22 @@ async def root():
                         const currentText = resultText.trim();
                         const baseText = baseReportText.trim();
                         
-                        // 결과가 기본 헤더만 있는지 확인 (한글 키 처리 후에는 더 이상 체크하지 않음)
-                        if (!resultText || (currentText === baseText || currentText.length <= baseText.length + 50) && !analysisData["Executive Summary"] && !analysisData["분석 개요"] && !analysisData["Key Insights"]) {
+                        // 결과가 기본 헤더만 있는지 확인 (영문/한글 키 처리 후에는 더 이상 체크하지 않음)
+                        const hasEnglishKeys = analysisData["Executive Summary"] || 
+                                              analysisData["Analysis Overview"] || 
+                                              analysisData["Key Insights"] ||
+                                              analysisData["Audience Detailed Analysis"] ||
+                                              analysisData["Strategic Recommendations"] ||
+                                              analysisData["Execution Roadmap"] ||
+                                              analysisData["Risks & Governance"] ||
+                                              analysisData["Appendix"];
+                        const hasKoreanKeys = analysisData["분석 개요"] || 
+                                             analysisData["오디언스 상세 분석"] ||
+                                             analysisData["전략 제안"] ||
+                                             analysisData["실행 로드맵"] ||
+                                             analysisData["리스크 & 거버넌스"] ||
+                                             analysisData["부록"];
+                        if (!resultText || ((currentText === baseText || currentText.length <= baseText.length + 50) && !hasEnglishKeys && !hasKoreanKeys)) {
                             resultText += "## ⚠️ 분석 결과 없음\\n\\n" ;
                             resultText += "분석 데이터를 받지 못했습니다.\\n\\n" ;
                             resultText += "**디버깅 정보**:\\n" ;
