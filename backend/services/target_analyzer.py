@@ -30,6 +30,10 @@ from backend.utils.security import (
     log_api_key_status_safely,
     validate_api_key
 )
+from backend.prompts.marketing_consultant_meta import (
+    get_meta_prompt_report_role,
+    get_report_output_instructions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -933,7 +937,8 @@ def _merge_analysis_results(openai_result: Dict[str, Any], gemini_result: Dict[s
 
 
 def _build_system_message(target_type: str) -> str:
-    """시스템 메시지 생성 (프롬프트 엔지니어링 개선)"""
+    """시스템 메시지 생성 (프롬프트 엔지니어링 개선 + 마케팅 컨설턴트 메타 역할)"""
+    meta_role = get_meta_prompt_report_role()
     base_instruction = """You are an expert analyst. Follow these rules strictly:
 1. Respond ONLY in valid JSON format (no markdown code blocks)
 2. Apply MECE principle: Mutually Exclusive, Collectively Exhaustive
@@ -943,20 +948,28 @@ def _build_system_message(target_type: str) -> str:
 6. Ensure accuracy: distinguish facts from estimates clearly"""
     
     if target_type == "audience":
-        return f"""Senior digital marketer and customer behavior consultant (15+ years). 
+        role_block = """Senior digital marketer and customer behavior consultant (15+ years). 
 Expertise: audience segmentation, persona development, customer journey mapping, behavioral psychology.
-{base_instruction}
-Deliver: comprehensive audience analysis with consulting-grade quality, MECE structure, and actionable insights."""
+"""
     elif target_type == "keyword":
-        return f"""Senior SEO and digital marketing strategist (15+ years).
+        role_block = """Senior SEO and digital marketing strategist (15+ years).
 Expertise: keyword research, search intent analysis, competitive analysis, content strategy.
-{base_instruction}
-Deliver: comprehensive keyword analysis with search volume estimates, competition analysis, and strategic recommendations."""
+"""
     else:  # comprehensive
-        return f"""Senior strategic marketing consultant (15+ years).
+        role_block = """Senior strategic marketing consultant (15+ years).
 Expertise: integrated marketing strategy, market research, competitive intelligence, growth strategy.
+"""
+    
+    deliver = {
+        "audience": "Deliver: comprehensive audience analysis with consulting-grade quality, MECE structure, and actionable insights.",
+        "keyword": "Deliver: comprehensive keyword analysis with search volume estimates, competition analysis, and strategic recommendations.",
+        "comprehensive": "Deliver: comprehensive analysis combining keyword and audience insights with strategic recommendations and execution roadmap.",
+    }.get(target_type, "Deliver: consulting-grade analysis report.")
+    
+    return f"""{meta_role}
+{role_block}
 {base_instruction}
-Deliver: comprehensive analysis combining keyword and audience insights with strategic recommendations and execution roadmap."""
+{deliver}"""
 
 
 def _build_analysis_prompt(
@@ -1103,6 +1116,9 @@ E. 마케팅 거버넌스(전략 운영 체계)
 4. 전략 제안: 인사이트를 바탕으로 실행 가능한 전략 수립
 5. 검증: 제안된 전략의 실현 가능성 및 효과 검증
 
+"""
+        prompt += get_report_output_instructions("audience")
+        prompt += """
 이제 위 포맷으로 보고서를 JSON 형식으로 작성하세요. 반드시 유효한 JSON 형식으로만 응답하세요.
 
 {
@@ -1378,6 +1394,9 @@ E. 실행 시사점(디지털 마케팅 관점)
 - 실행 중심: "그래서 무엇을 할 것인가"가 각 섹션에 포함
 - 문서에 그대로 붙여넣기 좋은 서식(번호/계층/불릿) 유지
 
+"""
+        prompt += get_report_output_instructions("keyword")
+        prompt += """
 이제 위 포맷으로 보고서를 JSON 형식으로 작성하세요. 반드시 유효한 JSON 형식으로만 응답하세요.
 
 {
@@ -1572,8 +1591,9 @@ E. 실행 시사점(디지털 마케팅 관점)
 """
         if additional_context:
             prompt += f"**추가 컨텍스트**: {additional_context}\n\n"
-        
-        prompt += """다음 JSON 구조로 응답하세요 (키워드와 오디언스 인사이트를 통합하고, 중복을 제거하며, 미래 지향적 권장사항에 집중):
+        prompt += get_report_output_instructions("comprehensive")
+        prompt += """
+다음 JSON 구조로 응답하세요 (키워드와 오디언스 인사이트를 통합하고, 중복을 제거하며, 미래 지향적 권장사항에 집중):
 {
   "executive_summary": "3-5 paragraph summary integrating keyword opportunities and audience characteristics with strategic recommendations",
   "key_findings": {

@@ -3,7 +3,16 @@
 """
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-from backend.services.target_analyzer import analyze_target, _analyze_basic
+from backend.services.target_analyzer import (
+    analyze_target,
+    _analyze_basic,
+    _build_system_message,
+    _build_analysis_prompt,
+)
+from backend.prompts.marketing_consultant_meta import (
+    get_meta_prompt_report_role,
+    get_report_output_instructions,
+)
 
 
 class TestAnalyzeTarget:
@@ -133,3 +142,42 @@ class TestAnalyzeBasic:
         )
         assert result is not None
         assert "additional_context" in result
+
+
+class TestMarketingConsultantMeta:
+    """마케팅 컨설턴트 메타 프롬프트 통합 검증"""
+
+    def test_system_message_includes_meta_role(self):
+        """시스템 메시지에 마케팅 컨설턴트 Serveagent 역할 포함"""
+        for target_type in ("keyword", "audience", "comprehensive"):
+            msg = _build_system_message(target_type)
+            assert "마케팅 컨설턴트" in msg or "Serveagent" in msg
+            assert "리포트" in msg or "보고서" in msg
+
+    def test_analysis_prompt_includes_report_instructions_keyword(self):
+        """키워드 분석 프롬프트에 리포트 출력 지침 포함"""
+        prompt = _build_analysis_prompt("테스트", "keyword", None, None, None)
+        instr = get_report_output_instructions("keyword")
+        assert "Executive Summary" in prompt or "executive_summary" in prompt
+        assert "Key Findings" in prompt or "key_findings" in prompt
+        assert instr.strip()[:30] in prompt or "근거" in prompt
+
+    def test_analysis_prompt_includes_report_instructions_audience(self):
+        """오디언스 분석 프롬프트에 리포트 출력 지침 포함"""
+        prompt = _build_analysis_prompt("테스트", "audience", None, None, None)
+        assert "executive_summary" in prompt or "Executive Summary" in prompt
+        assert "페르소나" in prompt
+        assert "고객 여정" in prompt or "customer_journey" in prompt
+
+    def test_analysis_prompt_includes_report_instructions_comprehensive(self):
+        """종합 분석 프롬프트에 리포트 출력 지침 포함"""
+        prompt = _build_analysis_prompt("테스트", "comprehensive", None, None, None)
+        assert "executive_summary" in prompt
+        assert "integrated" in prompt.lower() or "통합" in prompt
+
+    def test_meta_prompt_module_returns_non_empty(self):
+        """메타 프롬프트 모듈이 비어 있지 않은 문자열 반환"""
+        assert len(get_meta_prompt_report_role()) > 100
+        assert len(get_report_output_instructions("keyword")) > 50
+        assert len(get_report_output_instructions("audience")) > 50
+        assert len(get_report_output_instructions("comprehensive")) > 50

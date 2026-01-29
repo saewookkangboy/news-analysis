@@ -1,6 +1,7 @@
 """
 API 라우트
 """
+import asyncio
 import logging
 import json
 from typing import Optional, List
@@ -181,6 +182,7 @@ async def analyze_target_endpoint(
     include_recommendations: bool = Body(True, description="키워드 추천 포함 여부", example=True)
 ):
     """AI를 사용하여 타겟 분석을 수행합니다. 정성적 분석 및 키워드 추천 옵션 포함."""
+    progress_tracker = None
     try:
         logger.info(f"타겟 분석 요청: {target_keyword} ({target_type})")
         logger.info(f"요청 파라미터 - use_gemini: {use_gemini}, start_date: {start_date}, end_date: {end_date}")
@@ -210,30 +212,30 @@ async def analyze_target_endpoint(
             progress_tracker=progress_tracker
         )
         
-        # 정성적 분석 포함
+        # 정성적 분석 포함 (감정/맥락/톤 분석 병렬 실행)
         if include_sentiment:
             try:
                 if progress_tracker:
                     await progress_tracker.update(50, "정성적 분석 수행 중...")
-                sentiment_result = await analyze_sentiment(
-                    target_keyword=target_keyword,
-                    additional_context=additional_context,
-                    use_gemini=use_gemini
+                sentiment_result, context_result, tone_result = await asyncio.gather(
+                    analyze_sentiment(
+                        target_keyword=target_keyword,
+                        additional_context=additional_context,
+                        use_gemini=use_gemini
+                    ),
+                    analyze_context(
+                        target_keyword=target_keyword,
+                        additional_context=additional_context,
+                        use_gemini=use_gemini
+                    ),
+                    analyze_tone(
+                        target_keyword=target_keyword,
+                        additional_context=additional_context,
+                        use_gemini=use_gemini
+                    ),
                 )
                 result["sentiment"] = sentiment_result.get("sentiment", {})
-                
-                context_result = await analyze_context(
-                    target_keyword=target_keyword,
-                    additional_context=additional_context,
-                    use_gemini=use_gemini
-                )
                 result["context"] = context_result.get("context", {})
-                
-                tone_result = await analyze_tone(
-                    target_keyword=target_keyword,
-                    additional_context=additional_context,
-                    use_gemini=use_gemini
-                )
                 result["tone"] = tone_result.get("tone", {})
                 if progress_tracker:
                     await progress_tracker.update(70, "정성적 분석 완료")
@@ -471,27 +473,27 @@ async def comprehensive_analysis_endpoint(
             use_gemini=use_gemini
         )
         
-        # 정성적 분석
+        # 정성적 분석 (감정/맥락/톤 병렬 실행)
         try:
-            sentiment_result = await analyze_sentiment(
-                target_keyword=target_keyword,
-                additional_context=additional_context,
-                use_gemini=use_gemini
+            sentiment_result, context_result, tone_result = await asyncio.gather(
+                analyze_sentiment(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                ),
+                analyze_context(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                ),
+                analyze_tone(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                ),
             )
             result["sentiment"] = sentiment_result.get("sentiment", {})
-            
-            context_result = await analyze_context(
-                target_keyword=target_keyword,
-                additional_context=additional_context,
-                use_gemini=use_gemini
-            )
             result["context"] = context_result.get("context", {})
-            
-            tone_result = await analyze_tone(
-                target_keyword=target_keyword,
-                additional_context=additional_context,
-                use_gemini=use_gemini
-            )
             result["tone"] = tone_result.get("tone", {})
         except Exception as e:
             logger.warning(f"정성적 분석 중 오류 (무시됨): {e}")
@@ -544,16 +546,13 @@ async def compare_keywords_endpoint(
                 detail="한 번에 비교할 수 있는 키워드는 최대 5개입니다."
             )
         
-        # 각 키워드에 대한 기본 분석 수행
-        comparison_results = {}
-        for keyword in keywords:
+        # 각 키워드에 대한 분석 병렬 수행
+        async def analyze_one_keyword(keyword: str):
             result = await analyze_target(
                 target_keyword=keyword,
                 target_type="keyword",
                 use_gemini=use_gemini
             )
-            
-            # 정성적 분석 포함
             if not comparison_aspects or "sentiment" in comparison_aspects:
                 try:
                     sentiment_result = await analyze_sentiment(
@@ -563,8 +562,13 @@ async def compare_keywords_endpoint(
                     result["sentiment"] = sentiment_result.get("sentiment", {})
                 except Exception as e:
                     logger.warning(f"감정 분석 중 오류 (무시됨): {e}")
-            
-            comparison_results[keyword] = result
+            return keyword, result
+
+        results_list = await asyncio.gather(
+            *[analyze_one_keyword(kw) for kw in keywords],
+            return_exceptions=False
+        )
+        comparison_results = {kw: res for kw, res in results_list}
         
         # 비교 요약 생성
         comparison_summary = {
