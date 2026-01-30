@@ -619,19 +619,34 @@ async def root():
             }
             .result-content {
                 background: white;
-                padding: 20px;
+                padding: 24px 20px;
                 border-radius: 4px;
-                white-space: pre-wrap;
                 font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
                 font-size: 0.875rem;
-                line-height: 1.6;
+                line-height: 1.65;
                 max-height: 70vh;
                 overflow-y: auto;
                 border: 1px solid #E5E7EB;
                 color: #111827;
                 letter-spacing: -0.42px;
-                /* Flat Design: No box-shadow */
                 box-shadow: none !important;
+            }
+            /* 분석 결과 문서 스타일 (UI/UX: 가독성·계층·여백) */
+            .result-content .report-body { max-width: 72ch; margin: 0 auto; }
+            .result-content .report-body .report-h1 { font-size: 1.5rem; font-weight: 700; color: #111827; margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 2px solid #111827; letter-spacing: -0.72px; line-height: 1.35; }
+            .result-content .report-body .report-h1:first-child { margin-top: 0; }
+            .result-content .report-body .report-h2 { font-size: 1.25rem; font-weight: 600; color: #111827; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #E5E7EB; letter-spacing: -0.6px; line-height: 1.4; }
+            .result-content .report-body .report-h3 { font-size: 1.0625rem; font-weight: 600; color: #374151; margin: 16px 0 8px; letter-spacing: -0.5px; line-height: 1.45; }
+            .result-content .report-body .report-p { margin: 0 0 10px; color: #374151; line-height: 1.65; }
+            .result-content .report-body .report-ul { margin: 8px 0 16px; padding-left: 24px; list-style-type: disc; }
+            .result-content .report-body .report-ol { margin: 8px 0 16px; padding-left: 24px; list-style-type: decimal; }
+            .result-content .report-body .report-li { margin-bottom: 6px; line-height: 1.6; color: #374151; }
+            .result-content .report-body .report-hr { border: none; border-top: 1px solid #E5E7EB; margin: 20px 0; }
+            .result-content .report-body strong { font-weight: 600; color: #111827; }
+            .result-content .report-body .report-meta { font-size: 0.8125rem; color: #6B7280; margin-top: 24px; padding-top: 16px; border-top: 1px solid #E5E7EB; }
+            @media (max-width: 640px) {
+                .result-content .report-body { max-width: 100%; }
+                .result-content { padding: 16px; }
             }
             .links {
                 display: grid;
@@ -971,9 +986,61 @@ async def root():
             });
             
             // 클립보드 복사 함수
+            function escapeReportHtml(s) {
+                if (!s) return "";
+                return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+            }
+            function markdownToReportHtml(text) {
+                if (!text || typeof text !== "string") return "<div class=\"report-body\"></div>";
+                var escaped = escapeReportHtml(text);
+                var lines = text.split("\\n");
+                var out = [];
+                var inList = false;
+                var listTag = "ul";
+                function flushList() {
+                    if (inList) { out.push("</" + listTag + ">"); inList = false; }
+                }
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i];
+                    var trimmed = line.trim();
+                    if (trimmed === "" || trimmed === "---") {
+                        flushList();
+                        if (trimmed === "---") out.push("<hr class=\"report-hr\" />");
+                        continue;
+                    }
+                    if (trimmed.indexOf("### ") === 0) {
+                        flushList();
+                        out.push("<h3 class=\"report-h3\">" + escapeReportHtml(trimmed.slice(4)) + "</h3>");
+                    } else if (trimmed.indexOf("## ") === 0) {
+                        flushList();
+                        out.push("<h2 class=\"report-h2\">" + escapeReportHtml(trimmed.slice(3)) + "</h2>");
+                    } else if (trimmed.indexOf("# ") === 0) {
+                        flushList();
+                        out.push("<h1 class=\"report-h1\">" + escapeReportHtml(trimmed.slice(2)) + "</h1>");
+                    } else if (trimmed.indexOf("- ") === 0) {
+                        if (!inList) { out.push("<ul class=\"report-ul\">"); inList = true; listTag = "ul"; }
+                        var content = escapeReportHtml(trimmed.slice(2));
+                        content = content.replace(/\\*\\*([^*]+)\\*\\*/g, "<strong>$1</strong>");
+                        out.push("<li class=\"report-li\">" + content + "</li>");
+                    } else if (/^\\d+\\.\\s/.test(trimmed)) {
+                        if (!inList) { out.push("<ol class=\"report-ol\">"); inList = true; listTag = "ol"; }
+                        var content = escapeReportHtml(trimmed.replace(/^\\d+\\.\\s/, ""));
+                        content = content.replace(/\\*\\*([^*]+)\\*\\*/g, "<strong>$1</strong>");
+                        out.push("<li class=\"report-li\">" + content + "</li>");
+                    } else {
+                        flushList();
+                        var content = escapeReportHtml(trimmed);
+                        content = content.replace(/\\*\\*([^*]+)\\*\\*/g, "<strong>$1</strong>");
+                        out.push("<p class=\"report-p\">" + content + "</p>");
+                    }
+                }
+                flushList();
+                var html = out.join("");
+                return "<div class=\"report-body\">" + html + "</div>";
+            }
             function copyToClipboard() {
                 const resultContent = document.getElementById("resultContent");
-                const text = resultContent.textContent;
+                const text = resultContent.innerText || resultContent.textContent || "";
                 
                 navigator.clipboard.writeText(text).then(function() {
                     const copyBtn = document.getElementById("copyBtn");
@@ -2900,7 +2967,7 @@ async def root():
                         resultText += "---\\n\\n" ;
                         resultText += "*본 보고서는 AI 기반 분석 결과입니다.*\\n" ;
                         
-                        resultContent.textContent = resultText;
+                        resultContent.innerHTML = markdownToReportHtml(resultText);
                         resultSection.classList.add("show");
                         emptyState.style.display = "none";
                     } else if (data && !data.success) {
