@@ -1536,8 +1536,18 @@ async def root():
                                 executiveSummary = analysisData["Executive Summary"];
                             }
                             
+ㅅ                            // 객체인 경우 문자열로 변환 (.split 호출 전 필수)
+                            if (executiveSummary != null && typeof executiveSummary !== "string") {
+                                if (typeof executiveSummary === "object") {
+                                    const t = executiveSummary.text || executiveSummary.content;
+                                    executiveSummary = (t && typeof t === "string") ? t : JSON.stringify(executiveSummary, null, 2);
+                                } else {
+                                    executiveSummary = String(executiveSummary);
+                                }
+                            }
+                            
                             // 중복된 내용 제거 (API 키 경고 메시지 등)
-                            if (executiveSummary) {
+                            if (executiveSummary && typeof executiveSummary === "string") {
                                 // 중복된 문장 제거
                                 const lines = executiveSummary.split('\\n');
                                 const uniqueLines = [];
