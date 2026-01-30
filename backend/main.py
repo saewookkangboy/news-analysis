@@ -1525,6 +1525,51 @@ async def root():
                             return mapped;
                         }
                         
+                        // 객체/배열을 읽기 쉬운 문서 형식으로 변환 (JSON 대신)
+                        function formatValueForReport(val, depth) {
+                            depth = depth || 0;
+                            if (val == null) return "";
+                            if (typeof val === "string") return val;
+                            if (typeof val === "number" || typeof val === "boolean") return String(val);
+                            if (Array.isArray(val)) {
+                                return val.map(function(item, i) {
+                                    if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+                                        var parts = [];
+                                        Object.keys(item).forEach(function(k) {
+                                            var v = item[k];
+                                            if (v != null) parts.push((k === "Evidence" || k === "근거" ? "**근거**" : k === "Interpretation" || k === "해석" ? "**해석**" : k === "Implication" || k === "시사점" ? "**시사점**" : "**" + k + "**") + ": " + (typeof v === "string" ? v : formatValueForReport(v, depth + 1)));
+                                        });
+                                        return (i + 1) + ". " + parts.join(" | ");
+                                    }
+                                    return (i + 1) + ". " + (typeof item === "object" ? formatValueForReport(item, depth + 1) : item);
+                                }).join("\\n");
+                            }
+                            if (typeof val === "object") {
+                                var lines = [];
+                                Object.keys(val).forEach(function(k) {
+                                    var v = val[k];
+                                    if (v == null) return;
+                                    if (typeof v === "object" && !Array.isArray(v)) {
+                                        var sub = formatValueForReport(v, depth + 1);
+                                        if (sub.indexOf("\\n") >= 0 || sub.length > 80) {
+                                            lines.push("- **" + k + "**:\\n  " + sub.replace(/\\n/g, "\\n  "));
+                                        } else {
+                                            lines.push("- **" + k + "**: " + sub);
+                                        }
+                                    } else if (Array.isArray(v)) {
+                                        lines.push("- **" + k + "**: " + (v.length === 0 ? "" : v.join(", ")));
+                                    } else {
+                                        lines.push("- **" + k + "**: " + v);
+                                    }
+                                });
+                                return lines.join("\\n");
+                            }
+                            return String(val);
+                        }
+                        
+                        // 보고서에서 제외할 메타데이터/중복 키 (섹션으로 출력하지 않음)
+                        var skipSectionKeys = ["target_keyword", "target_type", "executive_summary", "analysis_overview", "key_findings", "execution_roadmap", "appendix", "Executive Summary", "분석 개요", "Key Findings", "상세 분석", "전략적 시사점", "Strategic Implications", "실행 로드맵", "Execution Roadmap", "리스크 & 대응", "Risks & Responses", "Risks & Governance", "부록", "Appendix", "Detailed Analysis", "primary_insights", "quantitative_metrics", "key_insights", "Key Insights", "detailed_audience_analysis", "Audience Detailed Analysis", "오디언스 상세 분석", "insights", "forward_looking_recommendations", "integrated_analysis", "target_audience", "recommendations", "metrics"];
+                        
                         // 모든 분석 유형에 키 매핑 적용 (키워드/오디언스/종합 공통)
                         analysisData = mapKeys(analysisData || {});
                         
@@ -1641,21 +1686,20 @@ async def root():
                                     resultText += "\\n" ;
                                 }
                                 
-                                // keyFindings의 다른 필드들도 표시
+                                // keyFindings의 다른 필드들도 표시 (skipSectionKeys 제외, 객체는 formatValueForReport)
                                 Object.keys(keyFindings).forEach(key => {
-                                    if (key !== "primary_insights" && key !== "quantitative_metrics" && keyFindings[key]) {
-                                        resultText += "### " + (key) + "\\n\\n" ;
-                                        if (Array.isArray(keyFindings[key])) {
-                                            keyFindings[key].forEach((item, idx) => {
-                                                resultText += (idx + 1) + ". " + (item) + "\\n" ;
-                                            });
-                                        } else if (typeof keyFindings[key] === "object") {
-                                            resultText += JSON.stringify(keyFindings[key], null, 2) + "\\n" ;
-                                        } else {
-                                            resultText += (keyFindings[key]) + "\\n" ;
-                                        }
-                                        resultText += "\\n" ;
+                                    if (skipSectionKeys.indexOf(key) >= 0 || !keyFindings[key]) return;
+                                    resultText += "### " + (key) + "\\n\\n" ;
+                                    if (Array.isArray(keyFindings[key])) {
+                                        keyFindings[key].forEach((item, idx) => {
+                                            resultText += (idx + 1) + ". " + (typeof item === "object" && item !== null ? formatValueForReport(item) : item) + "\\n" ;
+                                        });
+                                    } else if (typeof keyFindings[key] === "object") {
+                                        resultText += formatValueForReport(keyFindings[key]) + "\\n" ;
+                                    } else {
+                                        resultText += (keyFindings[key]) + "\\n" ;
                                     }
+                                    resultText += "\\n" ;
                                 });
                                 }
                             } else if (analysisData.key_points && Array.isArray(analysisData.key_points) && analysisData.key_points.length > 0) {
@@ -1765,25 +1809,12 @@ async def root():
                                 else if (typeof detailedAnalysis === "string") {
                                     resultText += detailedAnalysis + "\\n\\n" ;
                                 }
-                                // detailed_analysis가 객체이지만 insights가 없는 경우
+                                // detailed_analysis가 객체이지만 insights가 없는 경우 (skipSectionKeys, formatValueForReport)
                                 else if (typeof detailedAnalysis === "object") {
-                                    // detailed_analysis의 모든 필드를 표시
                                     Object.keys(detailedAnalysis).forEach(key => {
-                                        if (key !== "insights" && detailedAnalysis[key]) {
-                                            resultText += "### " + (key) + "\\n\\n" ;
-                                            if (typeof detailedAnalysis[key] === "object" && !Array.isArray(detailedAnalysis[key])) {
-                                                Object.keys(detailedAnalysis[key]).forEach(subKey => {
-                                                    resultText += "- **" + (subKey) + "**: " + (JSON.stringify(detailedAnalysis[key][subKey])) + "\\n" ;
-                                                });
-                                            } else if (Array.isArray(detailedAnalysis[key])) {
-                                                detailedAnalysis[key].forEach((item, idx) => {
-                                                    resultText += (idx + 1) + ". " + (item) + "\\n" ;
-                                                });
-                                            } else {
-                                                resultText += (detailedAnalysis[key]) + "\\n" ;
-                                            }
-                                            resultText += "\\n" ;
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !detailedAnalysis[key]) return;
+                                        resultText += "### " + (key) + "\\n\\n" ;
+                                        resultText += formatValueForReport(detailedAnalysis[key]) + "\\n\\n" ;
                                     });
                                 }
                             }
@@ -1885,6 +1916,23 @@ async def root():
                                 if (recs.success_metrics) {
                                     resultText += "### 성공 지표\\n\\n" + (recs.success_metrics) + "\\n\\n" ;
                                 }
+                                if (typeof recs === "object" && !Array.isArray(recs) && !recs.immediate_actions && !recs.short_term_strategies && !recs.long_term_strategies && !recs.success_metrics) {
+                                    Object.keys(recs).forEach(function(k) {
+                                        if (skipSectionKeys.indexOf(k) >= 0) return;
+                                        var v = recs[k];
+                                        if (v == null) return;
+                                        resultText += "### " + k + "\\n\\n";
+                                        resultText += formatValueForReport(v) + "\\n\\n";
+                                    });
+                                } else if (typeof recs === "object" && !Array.isArray(recs)) {
+                                    Object.keys(recs).forEach(function(k) {
+                                        if (["immediate_actions", "short_term_strategies", "long_term_strategies", "success_metrics"].indexOf(k) >= 0 || skipSectionKeys.indexOf(k) >= 0) return;
+                                        var v = recs[k];
+                                        if (v == null) return;
+                                        resultText += "### " + k + "\\n\\n";
+                                        resultText += formatValueForReport(v) + "\\n\\n";
+                                    });
+                                }
                             } else if (analysisData.recommendations && analysisData.recommendations.length > 0) {
                                 resultText += "## 권장사항\\n\\n" ;
                                 analysisData.recommendations.forEach((rec, idx) => {
@@ -1930,9 +1978,9 @@ async def root():
                                             const implication = item.implication || item["시사점"];
                                             const insight = item.insight || item["인사이트"];
                                             if (insight) resultText += "### " + (insight) + "\\n\\n" ;
-                                            if (evidence) resultText += "- **근거**: " + (typeof evidence === "string" ? evidence : JSON.stringify(evidence)) + "\\n" ;
-                                            if (interpretation) resultText += "- **해석**: " + (typeof interpretation === "string" ? interpretation : JSON.stringify(interpretation)) + "\\n" ;
-                                            if (implication) resultText += "- **시사점**: " + (typeof implication === "string" ? implication : JSON.stringify(implication)) + "\\n" ;
+                                            if (evidence) resultText += "- **근거**: " + (typeof evidence === "string" ? evidence : formatValueForReport(evidence)) + "\\n" ;
+                                            if (interpretation) resultText += "- **해석**: " + (typeof interpretation === "string" ? interpretation : formatValueForReport(interpretation)) + "\\n" ;
+                                            if (implication) resultText += "- **시사점**: " + (typeof implication === "string" ? implication : formatValueForReport(implication)) + "\\n" ;
                                             resultText += "\\n" ;
                                         } else {
                                             resultText += (idx + 1) + ". " + (item) + "\\n" ;
@@ -2064,28 +2112,11 @@ async def root():
                                 resultText += "## 상세 분석 (Detailed Analysis)\\n\\n" ;
                                 Object.keys(detailedAnalysisKw).forEach(function(key) {
                                     if (key === "insights") return;
+                                    if (skipSectionKeys.indexOf(key) >= 0) return;
                                     var val = detailedAnalysisKw[key];
                                     if (val == null) return;
                                     resultText += "### " + key + "\\n\\n";
-                                    if (typeof val === "object" && !Array.isArray(val)) {
-                                        Object.keys(val).forEach(function(subKey) {
-                                            var subVal = val[subKey];
-                                            if (subVal == null) return;
-                                            if (typeof subVal === "object" && !Array.isArray(subVal)) {
-                                                resultText += "- **" + subKey + "**: " + JSON.stringify(subVal, null, 2) + "\\n";
-                                            } else if (Array.isArray(subVal)) {
-                                                resultText += "- **" + subKey + "**:\\n";
-                                                subVal.forEach(function(item, i) { resultText += "  " + (i+1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n"; });
-                                            } else {
-                                                resultText += "- **" + subKey + "**: " + subVal + "\\n";
-                                            }
-                                        });
-                                    } else if (Array.isArray(val)) {
-                                        val.forEach(function(item, i) { resultText += (i+1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n"; });
-                                    } else {
-                                        resultText += (val) + "\\n";
-                                    }
-                                    resultText += "\\n";
+                                    resultText += formatValueForReport(val) + "\\n\\n";
                                 });
                             }
                             
@@ -2129,20 +2160,11 @@ async def root():
                                 
                                 if (typeof recsKw === "object" && !Array.isArray(recsKw) && !recsKw.immediate_actions && !recsKw.short_term_strategies && !recsKw.long_term_strategies && !recsKw.success_metrics) {
                                     Object.keys(recsKw).forEach(function(k) {
+                                        if (skipSectionKeys.indexOf(k) >= 0) return;
                                         var v = recsKw[k];
                                         if (v == null) return;
                                         resultText += "### " + k + "\\n\\n";
-                                        if (typeof v === "object" && !Array.isArray(v)) {
-                                            Object.keys(v).forEach(function(sk) {
-                                                var sv = v[sk];
-                                                if (sv != null) resultText += "- **" + sk + "**: " + (typeof sv === "object" ? JSON.stringify(sv, null, 2) : sv) + "\\n";
-                                            });
-                                        } else if (Array.isArray(v)) {
-                                            v.forEach(function(it, i) { resultText += (i+1) + ". " + (typeof it === "object" ? JSON.stringify(it) : it) + "\\n"; });
-                                        } else {
-                                            resultText += (v) + "\\n";
-                                        }
-                                        resultText += "\\n";
+                                        resultText += formatValueForReport(v) + "\\n\\n";
                                     });
                                 }
                             } else if (analysisData.recommendations && analysisData.recommendations.length > 0) {
@@ -2182,17 +2204,7 @@ async def root():
                                     var v = roadmapKw[k];
                                     if (v == null) return;
                                     resultText += "### " + k + "\\n\\n";
-                                    if (typeof v === "object" && !Array.isArray(v)) {
-                                        Object.keys(v).forEach(function(sk) {
-                                            var sv = v[sk];
-                                            if (sv != null) resultText += "- **" + sk + "**: " + (Array.isArray(sv) ? sv.join(", ") : (typeof sv === "object" ? JSON.stringify(sv, null, 2) : sv)) + "\\n";
-                                        });
-                                    } else if (Array.isArray(v)) {
-                                        v.forEach(function(it, i) { resultText += (i+1) + ". " + (typeof it === "object" ? JSON.stringify(it) : it) + "\\n"; });
-                                    } else {
-                                        resultText += (v) + "\\n";
-                                    }
-                                    resultText += "\\n";
+                                    resultText += formatValueForReport(v) + "\\n\\n";
                                 });
                             }
                             
@@ -2204,17 +2216,7 @@ async def root():
                                     var v = riskKw[k];
                                     if (v == null) return;
                                     resultText += "### " + k + "\\n\\n";
-                                    if (typeof v === "object" && !Array.isArray(v)) {
-                                        Object.keys(v).forEach(function(sk) {
-                                            var sv = v[sk];
-                                            if (sv != null) resultText += "- **" + sk + "**: " + (typeof sv === "object" ? JSON.stringify(sv, null, 2) : sv) + "\\n";
-                                        });
-                                    } else if (Array.isArray(v)) {
-                                        v.forEach(function(it, i) { resultText += (i+1) + ". " + (typeof it === "object" ? JSON.stringify(it) : it) + "\\n"; });
-                                    } else {
-                                        resultText += (v) + "\\n";
-                                    }
-                                    resultText += "\\n";
+                                    resultText += formatValueForReport(v) + "\\n\\n";
                                 });
                             }
                             
@@ -2226,47 +2228,72 @@ async def root():
                                     var v = appendixKw[k];
                                     if (v == null) return;
                                     resultText += "### " + k + "\\n\\n";
-                                    if (Array.isArray(v)) {
-                                        v.forEach(function(it, i) { resultText += (i+1) + ". " + (typeof it === "object" ? JSON.stringify(it, null, 2) : it) + "\\n"; });
-                                    } else if (typeof v === "object") {
-                                        resultText += JSON.stringify(v, null, 2) + "\\n";
-                                    } else {
-                                        resultText += (v) + "\\n";
-                                    }
-                                    resultText += "\\n";
+                                    resultText += formatValueForReport(v) + "\\n\\n";
                                 });
                             }
                         } else if (targetType === "comprehensive" && analysisData) {
-                            // 종합 분석 상세 포맷팅 (키워드 + 오디언스 통합)
+                            // 종합 분석 상세 포맷팅 (키워드 + 오디언스 통합, 동일 문서 스타일)
                             
-                            // Executive Summary
-                            if (analysisData.executive_summary) {
-                                resultText += "## Executive Summary\\n\\n" + (analysisData.executive_summary) + "\\n\\n" ;
-                            } else if (analysisData.summary) {
-                                resultText += "## 요약\\n\\n" + (analysisData.summary) + "\\n\\n" ;
+                            // Executive Summary (문자열 정규화·중복/API 메시지 제거)
+                            let execSummaryComp = analysisData.executive_summary || analysisData["Executive Summary"] || analysisData.summary;
+                            if (execSummaryComp != null && typeof execSummaryComp !== "string") {
+                                if (typeof execSummaryComp === "object") {
+                                    const t = execSummaryComp.text || execSummaryComp.content;
+                                    execSummaryComp = (t && typeof t === "string") ? t : JSON.stringify(execSummaryComp, null, 2);
+                                } else {
+                                    execSummaryComp = String(execSummaryComp);
+                                }
+                            }
+                            if (execSummaryComp && typeof execSummaryComp === "string") {
+                                const lines = execSummaryComp.split("\\n");
+                                const uniqueLines = [];
+                                const seen = new Set();
+                                lines.forEach(line => {
+                                    const trimmed = line.trim();
+                                    if (trimmed.includes("⚠️ AI API 키가 설정되지 않아") || trimmed.includes("기본 분석 모드") || trimmed.includes("AI API를 설정하면")) return;
+                                    if (trimmed && !seen.has(trimmed)) { seen.add(trimmed); uniqueLines.push(line); }
+                                });
+                                const cleaned = uniqueLines.join("\\n").trim();
+                                if (cleaned) resultText += "## Executive Summary\\n\\n" + cleaned + "\\n\\n";
                             }
                             
-                            // Key Findings
-                            if (analysisData.key_findings) {
+                            // Key Findings (배열·객체·primary_insights/quantitative_metrics 동일 스타일)
+                            const keyFindingsComp = analysisData.key_findings || analysisData["Key Findings"];
+                            if (keyFindingsComp) {
                                 resultText += "## 주요 발견사항 (Key Findings)\\n\\n" ;
-                                
-                                if (analysisData.key_findings.primary_insights && analysisData.key_findings.primary_insights.length > 0) {
+                                if (Array.isArray(keyFindingsComp) && keyFindingsComp.length > 0) {
+                                    keyFindingsComp.forEach((item, idx) => {
+                                        if (typeof item === "object" && item !== null) {
+                                            const evidence = item.evidence || item["근거"];
+                                            const interpretation = item.interpretation || item["해석"];
+                                            const implication = item.implication || item["시사점"];
+                                            const insight = item.insight || item["인사이트"];
+                                            if (insight) resultText += "### " + (insight) + "\\n\\n" ;
+                                            if (evidence) resultText += "- **근거**: " + (typeof evidence === "string" ? evidence : formatValueForReport(evidence)) + "\\n" ;
+                                            if (interpretation) resultText += "- **해석**: " + (typeof interpretation === "string" ? interpretation : formatValueForReport(interpretation)) + "\\n" ;
+                                            if (implication) resultText += "- **시사점**: " + (typeof implication === "string" ? implication : formatValueForReport(implication)) + "\\n" ;
+                                            resultText += "\\n" ;
+                                        } else {
+                                            resultText += (idx + 1) + ". " + (item) + "\\n" ;
+                                        }
+                                    });
+                                } else if (keyFindingsComp.primary_insights && Array.isArray(keyFindingsComp.primary_insights) && keyFindingsComp.primary_insights.length > 0) {
                                     resultText += "### 핵심 인사이트\\n\\n" ;
-                                    analysisData.key_findings.primary_insights.forEach((point, idx) => {
+                                    keyFindingsComp.primary_insights.forEach((point, idx) => {
                                         resultText += (idx + 1) + ". " + (point) + "\\n" ;
                                     });
                                     resultText += "\\n" ;
                                 }
-                                
-                                if (analysisData.key_findings.quantitative_metrics) {
+                                if (keyFindingsComp.quantitative_metrics && typeof keyFindingsComp.quantitative_metrics === "object") {
                                     resultText += "### 정량적 지표\\n\\n" ;
-                                    const metrics = analysisData.key_findings.quantitative_metrics;
-                                    if (metrics.market_size) resultText += "- **시장 규모**: " + (metrics.market_size) + "\\n" ;
-                                    if (metrics.opportunity_score) resultText += "- **기회 점수**: " + (metrics.opportunity_score) + "\\n" ;
-                                    if (metrics.growth_potential) resultText += "- **성장 잠재력**: " + (metrics.growth_potential) + "\\n" ;
-                                    if (metrics.competition_level) resultText += "- **경쟁 수준**: " + (metrics.competition_level) + "\\n" ;
-                                    if (metrics.success_probability) resultText += "- **성공 확률**: " + (metrics.success_probability) + "\\n" ;
-                                    resultText += "\\n" ;
+                                    resultText += formatValueForReport(keyFindingsComp.quantitative_metrics) + "\\n\\n" ;
+                                }
+                                if (typeof keyFindingsComp === "object" && !Array.isArray(keyFindingsComp)) {
+                                    Object.keys(keyFindingsComp).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !keyFindingsComp[key]) return;
+                                        resultText += "### " + (key) + "\\n\\n" ;
+                                        resultText += formatValueForReport(keyFindingsComp[key]) + "\\n\\n" ;
+                                    });
                                 }
                             } else if (analysisData.key_points && analysisData.key_points.length > 0) {
                                 resultText += "## 주요 포인트\\n\\n" ;
@@ -2533,16 +2560,10 @@ async def root():
                                     resultText += "  " + (idx + 1) + ". " + (event) + "\\n" ;
                                 });
                             }
-                            // context 객체의 다른 필드들도 동적으로 표시
+                            // context 객체의 다른 필드들도 동적으로 표시 (동일 문서 스타일)
                             Object.keys(context).forEach(key => {
                                 if (!['industry_context', 'market_context', 'social_context', 'cultural_context', 'temporal_context', 'related_events'].includes(key) && context[key]) {
-                                    if (Array.isArray(context[key])) {
-                                        resultText += "- **" + (key) + "**: " + (context[key].join(', ')) + "\\n" ;
-                                    } else if (typeof context[key] === "object") {
-                                        resultText += "- **" + (key) + "**: " + (JSON.stringify(context[key])) + "\\n" ;
-                                    } else {
-                                        resultText += "- **" + (key) + "**: " + (context[key]) + "\\n" ;
-                                    }
+                                    resultText += "- **" + (key) + "**: " + (typeof context[key] === "object" ? formatValueForReport(context[key]) : context[key]) + "\\n" ;
                                 }
                             });
                             resultText += "\\n" ;
@@ -2661,19 +2682,10 @@ async def root():
                                 const overview = analysisData["Analysis Overview"];
                                 if (typeof overview === "object") {
                                     Object.keys(overview).forEach(key => {
-                                        if (overview[key]) {
-                                            if (typeof overview[key] === "object") {
-                                                resultText += "### " + key + "\\n\\n";
-                                                Object.keys(overview[key]).forEach(subKey => {
-                                                    resultText += "- **" + subKey + "**: " + (typeof overview[key][subKey] === "object" ? JSON.stringify(overview[key][subKey], null, 2) : overview[key][subKey]) + "\\n";
-                                                });
-                                                resultText += "\\n";
-                                            } else {
-                                                resultText += "- **" + key + "**: " + overview[key] + "\\n";
-                                            }
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !overview[key]) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(overview[key]) + "\\n\\n";
                                     });
-                                    resultText += "\\n";
                                 } else {
                                     resultText += overview + "\\n\\n";
                                 }
@@ -2683,19 +2695,10 @@ async def root():
                                 const overview = analysisData["분석 개요"];
                                 if (typeof overview === "object") {
                                     Object.keys(overview).forEach(key => {
-                                        if (overview[key]) {
-                                            if (typeof overview[key] === "object") {
-                                                resultText += "### " + key + "\\n\\n";
-                                                Object.keys(overview[key]).forEach(subKey => {
-                                                    resultText += "- **" + subKey + "**: " + (typeof overview[key][subKey] === "object" ? JSON.stringify(overview[key][subKey], null, 2) : overview[key][subKey]) + "\\n";
-                                                });
-                                                resultText += "\\n";
-                                            } else {
-                                                resultText += "- **" + key + "**: " + overview[key] + "\\n";
-                                            }
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !overview[key]) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(overview[key]) + "\\n\\n";
                                     });
-                                    resultText += "\\n";
                                 } else {
                                     resultText += overview + "\\n\\n";
                                 }
@@ -2718,15 +2721,9 @@ async def root():
                                     resultText += "\\n";
                                 } else if (typeof insights === "object") {
                                     Object.keys(insights).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || insights[key] == null) return;
                                         resultText += "### " + key + "\\n\\n";
-                                        if (Array.isArray(insights[key])) {
-                                            insights[key].forEach((item, idx) => {
-                                                resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
-                                            });
-                                        } else {
-                                            resultText += insights[key] + "\\n";
-                                        }
-                                        resultText += "\\n";
+                                        resultText += formatValueForReport(insights[key]) + "\\n\\n";
                                     });
                                 } else {
                                     resultText += insights + "\\n\\n";
@@ -2735,349 +2732,131 @@ async def root():
                             if (analysisData["Audience Detailed Analysis"]) {
                                 resultText += "## Audience Detailed Analysis\\n\\n";
                                 const detailed = analysisData["Audience Detailed Analysis"];
-                                if (typeof detailed === "object") {
+                                if (typeof detailed === "object" && !Array.isArray(detailed)) {
                                     Object.keys(detailed).forEach(key => {
-                                        if (detailed[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof detailed[key] === "object" && !Array.isArray(detailed[key])) {
-                                                Object.keys(detailed[key]).forEach(subKey => {
-                                                    const value = detailed[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            resultText += "- **" + subKey + "**:\\n";
-                                                            value.forEach((item, idx) => {
-                                                                if (typeof item === "object") {
-                                                                    resultText += "  " + (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
-                                                                } else {
-                                                                    resultText += "  " + (idx + 1) + ". " + item + "\\n";
-                                                                }
-                                                            });
-                                                        } else if (typeof value === "object") {
-                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else if (Array.isArray(detailed[key])) {
-                                                detailed[key].forEach((item, idx) => {
-                                                    if (typeof item === "object") {
-                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
-                                                    } else {
-                                                        resultText += (idx + 1) + ". " + item + "\\n";
-                                                    }
-                                                });
-                                            } else {
-                                                resultText += detailed[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !detailed[key]) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(detailed[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += detailed + "\\n\\n";
+                                    resultText += (typeof detailed === "string" ? detailed : formatValueForReport(detailed)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["오디언스 상세 분석"]) {
                                 resultText += "## 오디언스 상세 분석\\n\\n";
                                 const detailed = analysisData["오디언스 상세 분석"];
-                                if (typeof detailed === "object") {
+                                if (typeof detailed === "object" && !Array.isArray(detailed)) {
                                     Object.keys(detailed).forEach(key => {
-                                        if (detailed[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof detailed[key] === "object" && !Array.isArray(detailed[key])) {
-                                                Object.keys(detailed[key]).forEach(subKey => {
-                                                    const value = detailed[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            resultText += "- **" + subKey + "**:\\n";
-                                                            value.forEach((item, idx) => {
-                                                                if (typeof item === "object") {
-                                                                    resultText += "  " + (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
-                                                                } else {
-                                                                    resultText += "  " + (idx + 1) + ". " + item + "\\n";
-                                                                }
-                                                            });
-                                                        } else if (typeof value === "object") {
-                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else if (Array.isArray(detailed[key])) {
-                                                detailed[key].forEach((item, idx) => {
-                                                    if (typeof item === "object") {
-                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
-                                                    } else {
-                                                        resultText += (idx + 1) + ". " + item + "\\n";
-                                                    }
-                                                });
-                                            } else {
-                                                resultText += detailed[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !detailed[key]) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(detailed[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += detailed + "\\n\\n";
+                                    resultText += (typeof detailed === "string" ? detailed : formatValueForReport(detailed)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["Strategic Recommendations"]) {
                                 resultText += "## Strategic Recommendations\\n\\n";
                                 const strategy = analysisData["Strategic Recommendations"];
-                                if (typeof strategy === "object") {
+                                if (typeof strategy === "object" && !Array.isArray(strategy)) {
                                     Object.keys(strategy).forEach(key => {
-                                        if (strategy[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof strategy[key] === "object" && !Array.isArray(strategy[key])) {
-                                                Object.keys(strategy[key]).forEach(subKey => {
-                                                    const value = strategy[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            value.forEach((item, idx) => {
-                                                                resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
-                                                            });
-                                                        } else if (typeof value === "object") {
-                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else if (Array.isArray(strategy[key])) {
-                                                strategy[key].forEach((item, idx) => {
-                                                    resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
-                                                });
-                                            } else {
-                                                resultText += strategy[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || strategy[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(strategy[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += strategy + "\\n\\n";
+                                    resultText += (typeof strategy === "string" ? strategy : formatValueForReport(strategy)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["전략 제안"]) {
                                 resultText += "## 전략 제안\\n\\n";
                                 const strategy = analysisData["전략 제안"];
-                                if (typeof strategy === "object") {
+                                if (typeof strategy === "object" && !Array.isArray(strategy)) {
                                     Object.keys(strategy).forEach(key => {
-                                        if (strategy[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof strategy[key] === "object" && !Array.isArray(strategy[key])) {
-                                                Object.keys(strategy[key]).forEach(subKey => {
-                                                    const value = strategy[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            value.forEach((item, idx) => {
-                                                                resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
-                                                            });
-                                                        } else if (typeof value === "object") {
-                                                            resultText += "- **" + subKey + "**: " + JSON.stringify(value, null, 2) + "\\n";
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else if (Array.isArray(strategy[key])) {
-                                                strategy[key].forEach((item, idx) => {
-                                                    resultText += (idx + 1) + ". " + (typeof item === "object" ? JSON.stringify(item) : item) + "\\n";
-                                                });
-                                            } else {
-                                                resultText += strategy[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || strategy[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(strategy[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += strategy + "\\n\\n";
+                                    resultText += (typeof strategy === "string" ? strategy : formatValueForReport(strategy)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["Execution Roadmap"]) {
                                 resultText += "## Execution Roadmap\\n\\n";
                                 const roadmap = analysisData["Execution Roadmap"];
-                                if (typeof roadmap === "object") {
+                                if (typeof roadmap === "object" && !Array.isArray(roadmap)) {
                                     Object.keys(roadmap).forEach(key => {
-                                        if (roadmap[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof roadmap[key] === "object") {
-                                                Object.keys(roadmap[key]).forEach(subKey => {
-                                                    const value = roadmap[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            resultText += "- **" + subKey + "**:\\n";
-                                                            value.forEach((item, idx) => {
-                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
-                                                            });
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else {
-                                                resultText += roadmap[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || roadmap[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(roadmap[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += roadmap + "\\n\\n";
+                                    resultText += (typeof roadmap === "string" ? roadmap : formatValueForReport(roadmap)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["실행 로드맵"]) {
                                 resultText += "## 실행 로드맵\\n\\n";
                                 const roadmap = analysisData["실행 로드맵"];
-                                if (typeof roadmap === "object") {
+                                if (typeof roadmap === "object" && !Array.isArray(roadmap)) {
                                     Object.keys(roadmap).forEach(key => {
-                                        if (roadmap[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof roadmap[key] === "object") {
-                                                Object.keys(roadmap[key]).forEach(subKey => {
-                                                    const value = roadmap[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            resultText += "- **" + subKey + "**:\\n";
-                                                            value.forEach((item, idx) => {
-                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
-                                                            });
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else {
-                                                resultText += roadmap[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || roadmap[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(roadmap[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += roadmap + "\\n\\n";
+                                    resultText += (typeof roadmap === "string" ? roadmap : formatValueForReport(roadmap)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["Risks & Governance"]) {
                                 resultText += "## Risks & Governance\\n\\n";
                                 const risk = analysisData["Risks & Governance"];
-                                if (typeof risk === "object") {
+                                if (typeof risk === "object" && !Array.isArray(risk)) {
                                     Object.keys(risk).forEach(key => {
-                                        if (risk[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof risk[key] === "object" && !Array.isArray(risk[key])) {
-                                                Object.keys(risk[key]).forEach(subKey => {
-                                                    const value = risk[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            resultText += "- **" + subKey + "**:\\n";
-                                                            value.forEach((item, idx) => {
-                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
-                                                            });
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else if (Array.isArray(risk[key])) {
-                                                risk[key].forEach((item, idx) => {
-                                                    resultText += (idx + 1) + ". " + item + "\\n";
-                                                });
-                                            } else {
-                                                resultText += risk[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || risk[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(risk[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += risk + "\\n\\n";
+                                    resultText += (typeof risk === "string" ? risk : formatValueForReport(risk)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["리스크 & 거버넌스"]) {
                                 resultText += "## 리스크 & 거버넌스\\n\\n";
                                 const risk = analysisData["리스크 & 거버넌스"];
-                                if (typeof risk === "object") {
+                                if (typeof risk === "object" && !Array.isArray(risk)) {
                                     Object.keys(risk).forEach(key => {
-                                        if (risk[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (typeof risk[key] === "object" && !Array.isArray(risk[key])) {
-                                                Object.keys(risk[key]).forEach(subKey => {
-                                                    const value = risk[key][subKey];
-                                                    if (value) {
-                                                        if (Array.isArray(value)) {
-                                                            resultText += "- **" + subKey + "**:\\n";
-                                                            value.forEach((item, idx) => {
-                                                                resultText += "  " + (idx + 1) + ". " + item + "\\n";
-                                                            });
-                                                        } else {
-                                                            resultText += "- **" + subKey + "**: " + value + "\\n";
-                                                        }
-                                                    }
-                                                });
-                                            } else if (Array.isArray(risk[key])) {
-                                                risk[key].forEach((item, idx) => {
-                                                    resultText += (idx + 1) + ". " + item + "\\n";
-                                                });
-                                            } else {
-                                                resultText += risk[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || risk[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(risk[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += risk + "\\n\\n";
+                                    resultText += (typeof risk === "string" ? risk : formatValueForReport(risk)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["Appendix"]) {
                                 resultText += "## Appendix\\n\\n";
                                 const appendix = analysisData["Appendix"];
-                                if (typeof appendix === "object") {
+                                if (typeof appendix === "object" && !Array.isArray(appendix)) {
                                     Object.keys(appendix).forEach(key => {
-                                        if (appendix[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (Array.isArray(appendix[key])) {
-                                                appendix[key].forEach((item, idx) => {
-                                                    if (typeof item === "object") {
-                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
-                                                    } else {
-                                                        resultText += (idx + 1) + ". " + item + "\\n";
-                                                    }
-                                                });
-                                            } else if (typeof appendix[key] === "object") {
-                                                resultText += JSON.stringify(appendix[key], null, 2) + "\\n";
-                                            } else {
-                                                resultText += appendix[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || appendix[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(appendix[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += appendix + "\\n\\n";
+                                    resultText += (typeof appendix === "string" ? appendix : formatValueForReport(appendix)) + "\\n\\n";
                                 }
                             }
                             if (analysisData["부록"]) {
                                 resultText += "## 부록\\n\\n";
                                 const appendix = analysisData["부록"];
-                                if (typeof appendix === "object") {
+                                if (typeof appendix === "object" && !Array.isArray(appendix)) {
                                     Object.keys(appendix).forEach(key => {
-                                        if (appendix[key]) {
-                                            resultText += "### " + key + "\\n\\n";
-                                            if (Array.isArray(appendix[key])) {
-                                                appendix[key].forEach((item, idx) => {
-                                                    if (typeof item === "object") {
-                                                        resultText += (idx + 1) + ". " + JSON.stringify(item, null, 2) + "\\n";
-                                                    } else {
-                                                        resultText += (idx + 1) + ". " + item + "\\n";
-                                                    }
-                                                });
-                                            } else if (typeof appendix[key] === "object") {
-                                                resultText += JSON.stringify(appendix[key], null, 2) + "\\n";
-                                            } else {
-                                                resultText += appendix[key] + "\\n";
-                                            }
-                                            resultText += "\\n";
-                                        }
+                                        if (skipSectionKeys.indexOf(key) >= 0 || appendix[key] == null) return;
+                                        resultText += "### " + key + "\\n\\n";
+                                        resultText += formatValueForReport(appendix[key]) + "\\n\\n";
                                     });
                                 } else {
-                                    resultText += appendix + "\\n\\n";
+                                    resultText += (typeof appendix === "string" ? appendix : formatValueForReport(appendix)) + "\\n\\n";
                                 }
                             }
                         }
