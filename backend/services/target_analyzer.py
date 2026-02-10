@@ -1767,48 +1767,106 @@ async def analyze_target_stream(
             yield {"type": "complete", "data": result}
             return
         
-        # OpenAI 스트리밍
-        if has_openai_key:
-            chunk_received = False
-            async for chunk in _analyze_with_openai_stream(
-                target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
-            ):
-                chunk_received = True
-                yield chunk
-                if chunk.get("type") == "complete":
-                    return
-                if chunk.get("type") == "error":
-                    return
+        # Gemini 우선 모드 (OpenAI Quota 문제 해결용)
+        if use_gemini and has_gemini_key:
+            if progress_tracker:
+                await progress_tracker.update(10, "Gemini API로 스트리밍 분석 시작...")
+                yield {"type": "progress", "progress": 10, "message": "Gemini API로 스트리밍 분석 시작..."}
             
-            # 청크를 받지 못한 경우 (에러 처리)
-            if not chunk_received:
-                logger.error("OpenAI 스트리밍: 청크를 받지 못함")
-                yield {
-                    "type": "error",
-                    "message": "OpenAI API 응답을 받지 못했습니다. API 키 및 네트워크 상태를 확인해주세요."
-                }
-                return
+            try:
+                chunk_received = False
+                async for chunk in _analyze_with_gemini_stream(
+                    target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+                ):
+                    chunk_received = True
+                    yield chunk
+                    if chunk.get("type") == "complete":
+                        return
+                    if chunk.get("type") == "error":
+                        # 에러 발생 시 루프 중단하고 fallback 시도 여부 결정
+                        raise Exception(chunk.get("message", "Unknown error"))
                 
-        # Gemini 스트리밍
+                if not chunk_received:
+                    raise Exception("Gemini API 응답을 받지 못했습니다.")
+                return
+
+            except Exception as e:
+                logger.error(f"Gemini 스트리밍 분석 중 오류: {e}", exc_info=True)
+                if not has_openai_key:
+                    yield {"type": "error", "message": str(e)}
+                    return
+                # Fallback to OpenAI
+                logger.info("🔄 OpenAI API로 스트리밍 fallback...")
+                if progress_tracker:
+                    await progress_tracker.update(20, "Gemini 실패, OpenAI로 전환 중...")
+                    yield {"type": "progress", "progress": 20, "message": "Gemini 실패, OpenAI로 전환 중..."}
+
+        # OpenAI 스트리밍 (기본 또는 Fallback)
+        if has_openai_key:
+            try:
+                chunk_received = False
+                async for chunk in _analyze_with_openai_stream(
+                    target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+                ):
+                    chunk_received = True
+                    yield chunk
+                    if chunk.get("type") == "complete":
+                        return
+                    if chunk.get("type") == "error":
+                        raise Exception(chunk.get("message", "Unknown error"))
+                
+                if not chunk_received:
+                    raise Exception("OpenAI API 응답을 받지 못했습니다.")
+                return
+
+            except Exception as e:
+                logger.error(f"OpenAI 스트리밍 분석 중 오류: {e}", exc_info=True)
+                # Fallback to Gemini (if not already tried)
+                if has_gemini_key and not (use_gemini and has_gemini_key): # 이미 위에서 Gemini를 시도했으면 다시 하지 않음
+                     logger.info("🔄 Gemini API로 스트리밍 fallback...")
+                     if progress_tracker:
+                        await progress_tracker.update(20, "OpenAI 실패, Gemini로 전환 중...")
+                        yield {"type": "progress", "progress": 20, "message": "OpenAI 실패, Gemini로 전환 중..."}
+                     
+                     try:
+                        chunk_received = False
+                        async for chunk in _analyze_with_gemini_stream(
+                            target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+                        ):
+                            chunk_received = True
+                            yield chunk
+                            if chunk.get("type") == "complete":
+                                return
+                        return
+                     except Exception as e2:
+                        logger.error(f"Gemini 스트리밍 fallback 실패: {e2}")
+                        yield {"type": "error", "message": f"모든 AI API 호출 실패: {str(e)}"}
+                        return
+
+                yield {"type": "error", "message": str(e)}
+                return
+        
+        # OpenAI가 없지만 Gemini가 있는 경우 (use_gemini=False였지만 OpenAI가 없는 경우)
         elif has_gemini_key:
-            chunk_received = False
-            async for chunk in _analyze_with_gemini_stream(
-                target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
-            ):
-                chunk_received = True
-                yield chunk
-                if chunk.get("type") == "complete":
-                    return
-                if chunk.get("type") == "error":
-                    return
-            
-            # 청크를 받지 못한 경우 (에러 처리)
-            if not chunk_received:
-                logger.error("Gemini 스트리밍: 청크를 받지 못함")
-                yield {
-                    "type": "error",
-                    "message": "Gemini API 응답을 받지 못했습니다. API 키 및 네트워크 상태를 확인해주세요."
-                }
+            try:
+                chunk_received = False
+                async for chunk in _analyze_with_gemini_stream(
+                    target_keyword, target_type, additional_context, start_date, end_date, progress_tracker
+                ):
+                    chunk_received = True
+                    yield chunk
+                    if chunk.get("type") == "complete":
+                        return
+                
+                if not chunk_received:
+                    yield {
+                        "type": "error",
+                        "message": "Gemini API 응답을 받지 못했습니다."
+                    }
+                return
+            except Exception as e:
+                logger.error(f"Gemini 스트리밍 분석 중 오류: {e}", exc_info=True)
+                yield {"type": "error", "message": str(e)}
                 return
                     
     except Exception as e:
