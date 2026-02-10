@@ -1626,6 +1626,20 @@ async def root():
                                 "부록": "appendix"
                             };
                             
+                            // camelCase 키 -> snake_case 키 매핑 (종합 분석 등)
+                            const camelCaseKeyMapping = {
+                                "executiveSummary": "executive_summary",
+                                "analysisOverview": "analysis_overview",
+                                "keyInsights": "key_insights",
+                                "keywordAnalysis": "keyword_analysis",
+                                "audienceAnalysis": "audience_analysis",
+                                "competitiveAnalysis": "competitive_analysis",
+                                "strategicRecommendations": "strategic_recommendations",
+                                "executionRoadmap": "execution_roadmap",
+                                "riskGovernance": "risk_governance",
+                                "appendix": "appendix"
+                            };
+                            
                             // 영문 키를 snake_case로 매핑
                             Object.keys(englishKeyMapping).forEach(englishKey => {
                                 if (mapped[englishKey] !== undefined) {
@@ -1642,6 +1656,16 @@ async def root():
                                     const englishKey = koreanKeyMapping[koreanKey];
                                     if (!mapped[englishKey]) {
                                         mapped[englishKey] = mapped[koreanKey];
+                                    }
+                                }
+                            });
+                            
+                            // camelCase 키를 snake_case로 매핑
+                            Object.keys(camelCaseKeyMapping).forEach(camelKey => {
+                                if (mapped[camelKey] !== undefined) {
+                                    const snakeKey = camelCaseKeyMapping[camelKey];
+                                    if (!mapped[snakeKey]) {
+                                        mapped[snakeKey] = mapped[camelKey];
                                     }
                                 }
                             });
@@ -2467,11 +2491,69 @@ async def root():
                             }
                             
                             // Integrated Analysis (키워드 + 오디언스 통합)
-                            const integrated = analysisData.integrated_analysis || analysisData.detailed_analysis || analysisData;
+                            // 1. 기존 integrated_analysis 구조 지원
+                            const integrated = analysisData.integrated_analysis || analysisData.detailed_analysis;
+                            
+                            // 2. 개별 섹션 구조 지원 (keyword_analysis, audience_analysis 등)
+                            const keywordAnalysis = analysisData.keyword_analysis || analysisData["keyword_analysis"];
+                            const audienceAnalysis = analysisData.audience_analysis || analysisData["audience_analysis"];
+                            const competitiveAnalysis = analysisData.competitive_analysis || analysisData["competitive_analysis"];
+                            const strategicRecs = analysisData.strategic_recommendations || analysisData["strategic_recommendations"];
+                            const roadmap = analysisData.execution_roadmap || analysisData["execution_roadmap"];
+                            
+                            // 통합 분석 타이틀
+                            resultText += "## 통합 분석 (Integrated Analysis)\\n\\n";
+                            
+                            // A. Keyword Analysis Section
+                            if (keywordAnalysis) {
+                                resultText += "### 키워드 분석 (Keyword Analysis)\\n\\n";
+                                if (typeof keywordAnalysis === "string") {
+                                    resultText += keywordAnalysis + "\\n\\n";
+                                } else {
+                                    Object.keys(keywordAnalysis).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !keywordAnalysis[key]) return;
+                                        // 포맷팅된 키 이름 사용
+                                        let label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+                                        label = label.charAt(0).toUpperCase() + label.slice(1);
+                                        resultText += "#### " + label + "\\n\\n";
+                                        resultText += formatValueForReport(keywordAnalysis[key]) + "\\n\\n";
+                                    });
+                                }
+                            }
+                            
+                            // B. Audience Analysis Section
+                            if (audienceAnalysis) {
+                                resultText += "### 오디언스 분석 (Audience Analysis)\\n\\n";
+                                if (typeof audienceAnalysis === "string") {
+                                    resultText += audienceAnalysis + "\\n\\n";
+                                } else {
+                                    Object.keys(audienceAnalysis).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !audienceAnalysis[key]) return;
+                                        let label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+                                        label = label.charAt(0).toUpperCase() + label.slice(1);
+                                        resultText += "#### " + label + "\\n\\n";
+                                        resultText += formatValueForReport(audienceAnalysis[key]) + "\\n\\n";
+                                    });
+                                }
+                            }
+
+                            // C. Competitive Analysis Section
+                            if (competitiveAnalysis) {
+                                resultText += "### 경쟁 분석 (Competitive Analysis)\\n\\n";
+                                if (typeof competitiveAnalysis === "string") {
+                                    resultText += competitiveAnalysis + "\\n\\n";
+                                } else {
+                                    Object.keys(competitiveAnalysis).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !competitiveAnalysis[key]) return;
+                                        let label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+                                        label = label.charAt(0).toUpperCase() + label.slice(1);
+                                        resultText += "#### " + label + "\\n\\n";
+                                        resultText += formatValueForReport(competitiveAnalysis[key]) + "\\n\\n";
+                                    });
+                                }
+                            }
                             
                             if (integrated) {
-                                resultText += "## 통합 분석 (Integrated Analysis)\\n\\n" ;
-                                
                                 // Keyword-Audience Alignment
                                 if (integrated.keyword_audience_alignment) {
                                     resultText += "### 키워드-오디언스 정렬 분석\\n\\n" ;
@@ -2627,21 +2709,87 @@ async def root():
                                     if (sm.integrated_kpis) resultText += "- **통합 KPI**: " + (sm.integrated_kpis) + "\\n" ;
                                     resultText += "\\n" ;
                                 }
-                            } else if (analysisData.strategic_recommendations) {
-                                resultText += "## 전략적 제안\\n\\n" ;
-                                const strat = analysisData.strategic_recommendations;
-                                if (strat.content_differentiation && strat.content_differentiation.length > 0) {
-                                    resultText += "### 콘텐츠 차별화 전략\\n\\n" ;
-                                    strat.content_differentiation.forEach((strategy, idx) => {
-                                        resultText += (idx + 1) + ". " + (strategy) + "\\n" ;
+                            // D. Strategic Recommendations (Enhanced)
+                            if (strategicRecs) {
+                                resultText += "## 전략적 제안 (Strategic Recommendations)\\n\\n";
+                                if (typeof strategicRecs === "string") {
+                                    resultText += strategicRecs + "\\n\\n";
+                                } else {
+                                    // 특정 필드가 있는 경우 우선 처리 (기존 로직 유지)
+                                    if (strategicRecs.content_differentiation && Array.isArray(strategicRecs.content_differentiation)) {
+                                        resultText += "### 콘텐츠 차별화 전략\\n\\n";
+                                        strategicRecs.content_differentiation.forEach((strategy, idx) => {
+                                            resultText += (idx + 1) + ". " + (strategy) + "\\n";
+                                        });
+                                        resultText += "\\n";
+                                    }
+                                    if (strategicRecs.pricing_strategy) {
+                                        resultText += "### 가격 전략\\n\\n" + (strategicRecs.pricing_strategy) + "\\n\\n";
+                                    }
+                                    if (strategicRecs.partnership_opportunities) {
+                                        resultText += "### 파트너십 기회\\n\\n" + (strategicRecs.partnership_opportunities) + "\\n\\n";
+                                    }
+                                    
+                                    // 그 외 모든 필드 처리 (Generic)
+                                    Object.keys(strategicRecs).forEach(key => {
+                                        if (["content_differentiation", "pricing_strategy", "partnership_opportunities"].indexOf(key) >= 0) return;
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !strategicRecs[key]) return;
+                                        
+                                        let label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+                                        label = label.charAt(0).toUpperCase() + label.slice(1);
+                                        resultText += "### " + label + "\\n\\n";
+                                        resultText += formatValueForReport(strategicRecs[key]) + "\\n\\n";
                                     });
-                                    resultText += "\\n" ;
                                 }
-                                if (strat.pricing_strategy) {
-                                    resultText += "### 가격 전략\\n\\n" + (strat.pricing_strategy) + "\\n\\n" ;
+                            }
+                            
+                            // E. Execution Roadmap
+                            if (roadmap) {
+                                resultText += "## 실행 로드맵 (Execution Roadmap)\\n\\n";
+                                if (typeof roadmap === "string") {
+                                    resultText += roadmap + "\\n\\n";
+                                } else {
+                                    Object.keys(roadmap).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !roadmap[key]) return;
+                                        let label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+                                        label = label.charAt(0).toUpperCase() + label.slice(1);
+                                        resultText += "### " + label + "\\n\\n";
+                                        resultText += formatValueForReport(roadmap[key]) + "\\n\\n";
+                                    });
                                 }
-                                if (strat.partnership_opportunities) {
-                                    resultText += "### 파트너십 기회\\n\\n" + (strat.partnership_opportunities) + "\\n\\n" ;
+                            }
+                            
+                            // F. Risks & Governance
+                            const risks = analysisData.risk_governance || analysisData["risk_governance"] || analysisData["Risks & Governance"];
+                            if (risks) {
+                                resultText += "## 리스크 & 거버넌스 (Risks & Governance)\\n\\n";
+                                if (typeof risks === "string") {
+                                    resultText += risks + "\\n\\n";
+                                } else {
+                                    Object.keys(risks).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !risks[key]) return;
+                                        let label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+                                        label = label.charAt(0).toUpperCase() + label.slice(1);
+                                        resultText += "### " + label + "\\n\\n";
+                                        resultText += formatValueForReport(risks[key]) + "\\n\\n";
+                                    });
+                                }
+                            }
+                            
+                            // G. Appendix
+                            const appendix = analysisData.appendix || analysisData["Appendix"];
+                            if (appendix) {
+                                resultText += "## 부록 (Appendix)\\n\\n";
+                                if (typeof appendix === "string") {
+                                    resultText += appendix + "\\n\\n";
+                                } else {
+                                    Object.keys(appendix).forEach(key => {
+                                        if (skipSectionKeys.indexOf(key) >= 0 || !appendix[key]) return;
+                                        let label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+                                        label = label.charAt(0).toUpperCase() + label.slice(1);
+                                        resultText += "### " + label + "\\n\\n";
+                                        resultText += formatValueForReport(appendix[key]) + "\\n\\n";
+                                    });
                                 }
                             }
                             
