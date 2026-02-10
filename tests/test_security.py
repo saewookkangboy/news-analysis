@@ -92,9 +92,10 @@ class TestCheckApiKeysStatus:
         assert status["gemini_configured"] is True
         assert "모든 API 키가 설정되었습니다" in status["message"]
     
-    def test_check_api_keys_only_openai(self, mock_openai_key):
+    def test_check_api_keys_only_openai(self):
         """OpenAI 키만 설정된 경우"""
-        with patch.dict(os.environ, {}, clear=True):
+        # 환경 변수를 초기화하되 OpenAI 키는 설정
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test12345678901234567890"}, clear=True):
             with patch("backend.config.settings.GEMINI_API_KEY", None):
                 status = check_api_keys_status()
                 assert status["openai_configured"] is True

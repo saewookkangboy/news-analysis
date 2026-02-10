@@ -22,12 +22,29 @@ const getApiBaseUrl = (): string => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+// 동일 요청 중복 방지(in-flight deduplication)
+const inFlightRequests = new Map<string, Promise<any>>();
+
+function getRequestKey(endpoint: string, options: ApiCallOptions = {}): string {
+  const method = options.method || 'GET';
+  const body = typeof options.body === 'string' ? options.body : '';
+  return `${method}:${endpoint}:${body}`;
+}
+
 // API 호출 헬퍼 함수 (타임아웃 및 재시도 로직 포함)
 async function apiCall<T>(
   endpoint: string,
   options: ApiCallOptions = {},
   retries: number = options.retries ?? 3
 ): Promise<ApiResponse<T>> {
+  const dedupeAllowed = retries === (options.retries ?? 3);
+  const requestKey = getRequestKey(endpoint, options);
+
+  if (dedupeAllowed && inFlightRequests.has(requestKey)) {
+    return inFlightRequests.get(requestKey) as Promise<ApiResponse<T>>;
+  }
+
+  const requestPromise = (async () => {
   const timeout = options.timeout ?? 30000; // 기본 30초 타임아웃
   const retryDelay = options.retryDelay ?? 1000; // 기본 1초 재시도 지연
 
@@ -128,6 +145,19 @@ async function apiCall<T>(
       error: errorMessage,
       detail: errorMessage,
     };
+  }
+  })();
+
+  if (dedupeAllowed) {
+    inFlightRequests.set(requestKey, requestPromise);
+  }
+
+  try {
+    return await requestPromise;
+  } finally {
+    if (dedupeAllowed) {
+      inFlightRequests.delete(requestKey);
+    }
   }
 }
 

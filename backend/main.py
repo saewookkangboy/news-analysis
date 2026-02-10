@@ -13,6 +13,7 @@ if str(project_root) not in sys.path:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, HTMLResponse
 
@@ -106,8 +107,16 @@ app.add_middleware(
 )
 
 # 캐싱 미들웨어 추가 (CORS 이후에 추가)
+if settings.GZIP_ENABLED:
+    app.add_middleware(GZipMiddleware, minimum_size=settings.GZIP_MINIMUM_SIZE)
+
 if settings.CACHE_ENABLED:
-    app.add_middleware(CacheMiddleware, duration=settings.CACHE_TTL)
+    app.add_middleware(
+        CacheMiddleware,
+        duration=settings.CACHE_TTL,
+        max_entries=settings.CACHE_MAX_ENTRIES,
+        cleanup_interval=settings.CACHE_CLEANUP_INTERVAL,
+    )
 
 # API 라우터 등록
 app.include_router(router, prefix="/api", tags=["analysis"])

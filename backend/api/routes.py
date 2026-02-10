@@ -212,53 +212,61 @@ async def analyze_target_endpoint(
             progress_tracker=progress_tracker
         )
         
-        # 정성적 분석 포함 (감정/맥락/톤 분석 병렬 실행)
+        post_tasks: List[tuple[str, asyncio.Task]] = []
+
+        # 후처리 작업 병렬화 (정성적 분석 + 키워드 추천)
         if include_sentiment:
-            try:
-                if progress_tracker:
-                    await progress_tracker.update(50, "정성적 분석 수행 중...")
-                sentiment_result, context_result, tone_result = await asyncio.gather(
-                    analyze_sentiment(
-                        target_keyword=target_keyword,
-                        additional_context=additional_context,
-                        use_gemini=use_gemini
-                    ),
-                    analyze_context(
-                        target_keyword=target_keyword,
-                        additional_context=additional_context,
-                        use_gemini=use_gemini
-                    ),
-                    analyze_tone(
-                        target_keyword=target_keyword,
-                        additional_context=additional_context,
-                        use_gemini=use_gemini
-                    ),
-                )
-                result["sentiment"] = sentiment_result.get("sentiment", {})
-                result["context"] = context_result.get("context", {})
-                result["tone"] = tone_result.get("tone", {})
-                if progress_tracker:
-                    await progress_tracker.update(70, "정성적 분석 완료")
-            except Exception as e:
-                logger.warning(f"정성적 분석 중 오류 (무시됨): {e}")
-        
-        # 키워드 추천 포함
-        if include_recommendations:
-            try:
-                if progress_tracker:
-                    await progress_tracker.update(75, "키워드 추천 생성 중...")
-                recommendations = await recommend_keywords(
+            if progress_tracker:
+                await progress_tracker.update(50, "정성적 분석 및 추천 생성 중...")
+            post_tasks.extend([
+                ("sentiment", asyncio.create_task(analyze_sentiment(
                     target_keyword=target_keyword,
-                    recommendation_type="all",
-                    max_results=10,
                     additional_context=additional_context,
                     use_gemini=use_gemini
-                )
-                result["recommendations"] = recommendations
-                if progress_tracker:
-                    await progress_tracker.update(95, "키워드 추천 완료")
-            except Exception as e:
-                logger.warning(f"키워드 추천 중 오류 (무시됨): {e}")
+                ))),
+                ("context", asyncio.create_task(analyze_context(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                ))),
+                ("tone", asyncio.create_task(analyze_tone(
+                    target_keyword=target_keyword,
+                    additional_context=additional_context,
+                    use_gemini=use_gemini
+                ))),
+            ])
+
+        if include_recommendations:
+            post_tasks.append(("recommendations", asyncio.create_task(recommend_keywords(
+                target_keyword=target_keyword,
+                recommendation_type="all",
+                max_results=10,
+                additional_context=additional_context,
+                use_gemini=use_gemini
+            ))))
+
+        if post_tasks:
+            task_results = await asyncio.gather(
+                *[task for _, task in post_tasks],
+                return_exceptions=True,
+            )
+
+            for (task_name, _), task_result in zip(post_tasks, task_results):
+                if isinstance(task_result, Exception):
+                    logger.warning(f"{task_name} 후처리 중 오류 (무시됨): {task_result}")
+                    continue
+
+                if task_name == "sentiment":
+                    result["sentiment"] = task_result.get("sentiment", {})
+                elif task_name == "context":
+                    result["context"] = task_result.get("context", {})
+                elif task_name == "tone":
+                    result["tone"] = task_result.get("tone", {})
+                elif task_name == "recommendations":
+                    result["recommendations"] = task_result
+
+            if progress_tracker:
+                await progress_tracker.update(95, "후처리 분석 완료")
         
         logger.info(f"타겟 분석 완료: {target_keyword} ({target_type})")
         

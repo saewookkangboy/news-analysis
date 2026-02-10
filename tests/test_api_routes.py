@@ -11,7 +11,7 @@ client = TestClient(app)
 class TestHealthCheck:
     """헬스 체크 엔드포인트 테스트"""
     
-    def test_health_check(self):
+    def test_health_check(self, mock_gemini_key):
         """헬스 체크 응답 확인"""
         response = client.get("/health")
         assert response.status_code == 200

@@ -4,7 +4,7 @@
 import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
-from backend.middleware.cache_middleware import get_cache_store
+from backend.middleware.cache_middleware import get_cache_store, get_cache_metrics
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,10 @@ async def get_cache_stats():
             "total_entries": len(cache_store),
             "active_entries": active_entries,
             "expired_entries": expired_entries,
-            "duration_seconds": settings.CACHE_TTL
+            "duration_seconds": settings.CACHE_TTL,
+            "max_entries": settings.CACHE_MAX_ENTRIES,
+            "cleanup_interval": settings.CACHE_CLEANUP_INTERVAL,
+            "metrics": get_cache_metrics(),
         }
         
     except Exception as e:
