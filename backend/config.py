@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     DATA_DIR: str = "./data"
     CACHE_ENABLED: bool = True
     CACHE_TTL: int = 3600  # 초 단위
+    CACHE_MAX_ENTRIES: int = 500
+    CACHE_CLEANUP_INTERVAL: int = 100
+
+    # 응답 압축 설정
+    GZIP_ENABLED: bool = True
+    GZIP_MINIMUM_SIZE: int = 1000
     
     # 로깅 설정
     LOG_LEVEL: str = "INFO"

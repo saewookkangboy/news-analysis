@@ -632,21 +632,63 @@ async def root():
                 box-shadow: none !important;
             }
             /* 분석 결과 문서 스타일 (UI/UX: 가독성·계층·여백) */
-            .result-content .report-body { max-width: 72ch; margin: 0 auto; }
-            .result-content .report-body .report-h1 { font-size: 1.5rem; font-weight: 700; color: #111827; margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 2px solid #111827; letter-spacing: -0.72px; line-height: 1.35; }
+            .result-content {
+                background: white;
+                padding: 40px; /* A4 여백 시뮬레이션 */
+                border-radius: 2px;
+                font-family: 'Inter', 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+                font-size: 10.5pt; /* 문서 표준 폰트 크기 */
+                line-height: 1.6;
+                max-height: 70vh;
+                overflow-y: auto;
+                border: 1px solid #E5E7EB;
+                color: #111827;
+                letter-spacing: -0.02em;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important; /* 종이 질감용 그림자 복원 */
+                max-width: 210mm; /* A4 너비 */
+                margin: 0 auto; /* 중앙 정렬 */
+            }
+            .result-content .report-body { max-width: 100%; margin: 0 auto; }
+            .result-content .report-body .report-h1 { font-size: 22pt; font-weight: 700; color: #111827; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 2px solid #111827; letter-spacing: -0.03em; line-height: 1.3; }
             .result-content .report-body .report-h1:first-child { margin-top: 0; }
-            .result-content .report-body .report-h2 { font-size: 1.25rem; font-weight: 600; color: #111827; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #E5E7EB; letter-spacing: -0.6px; line-height: 1.4; }
-            .result-content .report-body .report-h3 { font-size: 1.0625rem; font-weight: 600; color: #374151; margin: 16px 0 8px; letter-spacing: -0.5px; line-height: 1.45; }
-            .result-content .report-body .report-p { margin: 0 0 10px; color: #374151; line-height: 1.65; }
-            .result-content .report-body .report-ul { margin: 8px 0 16px; padding-left: 24px; list-style-type: disc; }
-            .result-content .report-body .report-ol { margin: 8px 0 16px; padding-left: 24px; list-style-type: decimal; }
-            .result-content .report-body .report-li { margin-bottom: 6px; line-height: 1.6; color: #374151; }
-            .result-content .report-body .report-hr { border: none; border-top: 1px solid #E5E7EB; margin: 20px 0; }
+            .result-content .report-body .report-h2 { font-size: 16pt; font-weight: 700; color: #111827; margin: 28px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #E5E7EB; letter-spacing: -0.025em; line-height: 1.4; break-after: avoid; }
+            .result-content .report-body .report-h3 { font-size: 13pt; font-weight: 600; color: #1F2937; margin: 20px 0 10px; letter-spacing: -0.02em; line-height: 1.45; break-after: avoid; }
+            .result-content .report-body .report-p { margin: 0 0 12px; color: #374151; line-height: 1.7; text-align: justify; }
+            .result-content .report-body .report-ul { margin: 8px 0 16px; padding-left: 20px; list-style-type: disc; }
+            .result-content .report-body .report-ol { margin: 8px 0 16px; padding-left: 20px; list-style-type: decimal; }
+            .result-content .report-body .report-li { margin-bottom: 6px; line-height: 1.65; color: #374151; padding-left: 4px; }
+            .result-content .report-body .report-hr { border: none; border-top: 1px solid #E5E7EB; margin: 24px 0; }
             .result-content .report-body strong { font-weight: 600; color: #111827; }
-            .result-content .report-body .report-meta { font-size: 0.8125rem; color: #6B7280; margin-top: 24px; padding-top: 16px; border-top: 1px solid #E5E7EB; }
+            .result-content .report-body .report-meta { font-size: 9pt; color: #6B7280; margin-top: 32px; padding-top: 20px; border-top: 1px solid #E5E7EB; text-align: center; }
+            
             @media (max-width: 640px) {
+                .result-content { padding: 20px; max-width: 100%; box-shadow: none !important; border: none; }
                 .result-content .report-body { max-width: 100%; }
-                .result-content { padding: 16px; }
+            }
+            
+            @media print {
+                body * {
+                    visibility: hidden;
+                }
+                .result-content, .result-content * {
+                    visibility: visible;
+                }
+                .result-content {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    max-width: 100%;
+                    padding: 0;
+                    margin: 0;
+                    box-shadow: none !important;
+                    border: none;
+                    overflow: visible;
+                    max-height: none;
+                }
+                .header, .settings-panel, .result-header, .empty-state, .loading, .error {
+                    display: none !important;
+                }
             }
             .links {
                 display: grid;
@@ -1440,6 +1482,12 @@ async def root():
                             // data.data를 기본으로 사용 (한글 키도 포함)
                             analysisData = { ...data.data };
                             
+                            // data.data.report가 있으면 그것을 최우선으로 사용 (오디언스 분석 등)
+                            if (data.data.report && typeof data.data.report === "object") {
+                                console.log("data.data.report 감지됨, analysisData로 사용");
+                                analysisData = { ...data.data.report };
+                            }
+                            
                             // 한글 키가 있는지 확인
                             const hasKoreanKeys = Object.keys(analysisData).some(key => 
                                 key === "Executive Summary" || 
@@ -1596,41 +1644,80 @@ async def root():
                         function formatValueForReport(val, depth) {
                             depth = depth || 0;
                             if (val == null) return "";
+                            
+                            // 기본 타입 처리
                             if (typeof val === "string") return val;
                             if (typeof val === "number" || typeof val === "boolean") return String(val);
+                            
+                            // 들여쓰기 생성 (깊이 * 2 spaces - Markdown list indentation)
+                            /* 
+                               마크다운 중첩 리스트 규칙:
+                               Level 1: - Item
+                               Level 2:   - Sub Item (2 spaces)
+                               Level 3:     - Sub Sub Item (4 spaces)
+                            */
+                            // 여기서는 재귀 호출 시 depth를 증가시키고, 호출하는 쪽에서 적절한 들여쓰기를 추가하도록 설계
+                            
+                            // 배열 처리
                             if (Array.isArray(val)) {
+                                if (val.length === 0) return "(내용 없음)";
+                                
+                                // 단순 문자열 배열인 경우
+                                if (val.every(item => typeof item === "string" || typeof item === "number")) {
+                                    return val.join(", ");
+                                }
+                                
+                                // 객체나 복잡한 배열인 경우
                                 return val.map(function(item, i) {
-                                    if (typeof item === "object" && item !== null && !Array.isArray(item)) {
-                                        var parts = [];
-                                        Object.keys(item).forEach(function(k) {
-                                            var v = item[k];
-                                            if (v != null) parts.push((k === "Evidence" || k === "근거" ? "**근거**" : k === "Interpretation" || k === "해석" ? "**해석**" : k === "Implication" || k === "시사점" ? "**시사점**" : "**" + k + "**") + ": " + (typeof v === "string" ? v : formatValueForReport(v, depth + 1)));
-                                        });
-                                        return (i + 1) + ". " + parts.join(" | ");
+                                    if (typeof item === "object" && item !== null) {
+                                        // 객체 항목은 하위 항목으로 표시
+                                        var subContent = formatValueForReport(item, depth + 1);
+                                        // 하위 컨텐츠가 여러 줄이면 들여쓰기 적용
+                                        if (subContent.includes("\\n")) {
+                                            return "- " + subContent.replace(/\\n/g, "\\n  ");
+                                        }
+                                        return "- " + subContent;
                                     }
-                                    return (i + 1) + ". " + (typeof item === "object" ? formatValueForReport(item, depth + 1) : item);
+                                    return "- " + item;
                                 }).join("\\n");
                             }
+                            
+                            // 객체 처리
                             if (typeof val === "object") {
                                 var lines = [];
                                 Object.keys(val).forEach(function(k) {
                                     var v = val[k];
                                     if (v == null) return;
-                                    if (typeof v === "object" && !Array.isArray(v)) {
-                                        var sub = formatValueForReport(v, depth + 1);
-                                        if (sub.indexOf("\\n") >= 0 || sub.length > 80) {
-                                            lines.push("- **" + k + "**:\\n  " + sub.replace(/\\n/g, "\\n  "));
-                                        } else {
-                                            lines.push("- **" + k + "**: " + sub);
-                                        }
-                                    } else if (Array.isArray(v)) {
-                                        lines.push("- **" + k + "**: " + (v.length === 0 ? "" : v.join(", ")));
+                                    
+                                    // 키 이름 포맷팅 (예: "market_size" -> "Market Size")
+                                    var label = k;
+                                    // 숫자_패턴 제거 (예: "1_executive_summary" -> "executive_summary")
+                                    label = label.replace(/^\\d+_/, '');
+                                    // 언더바를 공백으로 변환 및 첫 글자 대문자화
+                                    label = label.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                                    
+                                    // 특수 키 이름 한국어 매핑
+                                    if (k === "Evidence" || k === "근거") label = "근거";
+                                    else if (k === "Interpretation" || k === "해석") label = "해석";
+                                    else if (k === "Implication" || k === "시사점") label = "시사점";
+                                    else if (k === "Insight" || k === "insight") label = "인사이트";
+                                    
+                                    // 값 포맷팅 - 재귀 호출
+                                    var sub = formatValueForReport(v, depth + 1);
+                                    
+                                    // 값이 빈 문자열이면 스킵
+                                    if (sub === "") return;
+                                    
+                                    // 하위 컨텐츠가 멀티라인이거나 리스트인 경우
+                                    if (sub.includes("\\n") || sub.startsWith("- ")) {
+                                        lines.push("**" + label + "**:\\n" + sub); // 줄바꿈 후 출력
                                     } else {
-                                        lines.push("- **" + k + "**: " + v);
+                                        lines.push("**" + label + "**: " + sub); // 같은 줄 출력
                                     }
                                 });
                                 return lines.join("\\n");
                             }
+                            
                             return String(val);
                         }
                         
