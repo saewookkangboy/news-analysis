@@ -1700,8 +1700,8 @@ async def root():
                                     
                                     // 키 이름 포맷팅 (예: "market_size" -> "Market Size")
                                     var label = k;
-                                    // 숫자_패턴 제거 (예: "1_executive_summary" -> "executive_summary")
-                                    label = label.replace(/^\\d+_/, '');
+                                    // 숫자_패턴 또는 숫자.패턴 제거 (예: "1_executive_summary" -> "executive_summary", "1. Executive Summary" -> "Executive Summary")
+                                    label = label.replace(/^\d+[\._]\s?/, '').trim();
                                     // 언더바를 공백으로 변환 및 첫 글자 대문자화
                                     label = label.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
                                     
@@ -2874,7 +2874,17 @@ async def root():
                                 });
                             }
                             
-                            // 2. 기존 키 기반 렌더링 (Executive Summary 등)
+                            // 2. 키 정규화 (1. Executive Summary -> Executive Summary)
+                            // AI가 번호가 붙은 키를 반환하는 경우를 처리
+                            Object.keys(analysisData).forEach(function(key) {
+                                var cleanKey = key.replace(/^\d+[\._]\s?/, '').trim();
+                                if (cleanKey !== key && !analysisData[cleanKey]) {
+                                    // console.log("키 정규화:", key, "->", cleanKey);
+                                    analysisData[cleanKey] = analysisData[key];
+                                }
+                            });
+                            
+                            // 3. 기존 키 기반 렌더링 (Executive Summary 등)
                             if (analysisData["Executive Summary"]) {
                                 resultText += "## Executive Summary\\n\\n" + (analysisData["Executive Summary"]) + "\\n\\n";
                             }
