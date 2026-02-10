@@ -2837,6 +2837,44 @@ async def root():
                         // 영문/한글 키가 있는 경우 직접 처리 (오디언스 분석)
                         if (targetType === "audience" && analysisData && !resultText.includes("Executive Summary") && !resultText.includes("주요 발견사항")) {
                             // 영문/한글 키로 직접 데이터 표시
+                            // 1. sections 배열이 있는 경우 (Gemini가 가끔 이 구조로 반환함)
+                            if (analysisData.sections && Array.isArray(analysisData.sections)) {
+                                console.log("sections 구조 감지됨, 동적 렌더링 시작");
+                                if (analysisData.title) {
+                                    resultText += "# " + analysisData.title + "\\n\\n";
+                                }
+                                
+                                analysisData.sections.forEach(function(section) {
+                                    // 제목 처리 (heading or title)
+                                    var title = section.heading || section.title || "";
+                                    if (title) {
+                                        resultText += "## " + title + "\\n\\n";
+                                    }
+                                    
+                                    // 내용 처리 (content or body or subsections)
+                                    var content = section.content || section.body || section.subsections || "";
+                                    
+                                    if (Array.isArray(content)) {
+                                        // subsections 등 배열인 경우
+                                        content.forEach(function(sub) {
+                                            if (typeof sub === "string") {
+                                                resultText += sub + "\\n\\n";
+                                            } else if (typeof sub === "object") {
+                                                var subTitle = sub.heading || sub.title || "";
+                                                var subContent = sub.content || sub.body || "";
+                                                if (subTitle) resultText += "### " + subTitle + "\\n\\n";
+                                                if (subContent) resultText += (typeof subContent === "string" ? subContent : formatValueForReport(subContent)) + "\\n\\n";
+                                            }
+                                        });
+                                    } else if (typeof content === "object") {
+                                        resultText += formatValueForReport(content) + "\\n\\n";
+                                    } else {
+                                        resultText += content + "\\n\\n";
+                                    }
+                                });
+                            }
+                            
+                            // 2. 기존 키 기반 렌더링 (Executive Summary 등)
                             if (analysisData["Executive Summary"]) {
                                 resultText += "## Executive Summary\\n\\n" + (analysisData["Executive Summary"]) + "\\n\\n";
                             }
