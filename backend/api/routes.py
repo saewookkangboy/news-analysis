@@ -54,7 +54,7 @@ async def analyze_target_stream_endpoint(
     target_keyword: str = Body(..., description="분석할 타겟 키워드 또는 주제", example="전기차"),
     target_type: str = Body("keyword", description="분석 유형: keyword, audience, comprehensive", example="keyword"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보", example="2025년 한국 시장"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부", example=False),
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부", example=True),
     start_date: Optional[str] = Body(None, description="분석 시작일 (YYYY-MM-DD 형식)", example="2025-01-01"),
     end_date: Optional[str] = Body(None, description="분석 종료일 (YYYY-MM-DD 형식)", example="2025-01-31")
 ):
@@ -175,7 +175,7 @@ async def analyze_target_endpoint(
     target_keyword: str = Body(..., description="분석할 타겟 키워드 또는 주제", example="전기차"),
     target_type: str = Body("keyword", description="분석 유형: keyword, audience, comprehensive", example="keyword"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보", example="2025년 한국 시장"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부 (OpenAI 결과 보완)", example=False),
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부 (OpenAI 결과 보완)", example=True),
     start_date: Optional[str] = Body(None, description="분석 시작일 (YYYY-MM-DD 형식)", example="2025-01-01"),
     end_date: Optional[str] = Body(None, description="분석 종료일 (YYYY-MM-DD 형식)", example="2025-01-31"),
     include_sentiment: bool = Body(True, description="정성적 분석 포함 여부", example=True),
@@ -297,7 +297,7 @@ async def analyze_target_get(
     target_keyword: str = Query(..., description="분석할 타겟 키워드 또는 주제"),
     target_type: str = Query("keyword", description="분석 유형: keyword, audience, comprehensive"),
     additional_context: Optional[str] = Query(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Query(False, description="Gemini API 사용 여부"),
+    use_gemini: bool = Query(True, description="Gemini API 사용 여부"),
     start_date: Optional[str] = Query(None, description="분석 시작일 (YYYY-MM-DD 형식)"),
     end_date: Optional[str] = Query(None, description="분석 종료일 (YYYY-MM-DD 형식)")
 ):
@@ -339,7 +339,7 @@ async def analyze_target_get(
 async def analyze_sentiment_endpoint(
     target_keyword: str = Body(..., description="분석할 키워드"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부")
 ):
     """감정 분석을 수행합니다."""
     try:
@@ -366,7 +366,7 @@ async def analyze_sentiment_endpoint(
 async def analyze_context_endpoint(
     target_keyword: str = Body(..., description="분석할 키워드"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부")
 ):
     """맥락 분석을 수행합니다."""
     try:
@@ -393,7 +393,7 @@ async def analyze_context_endpoint(
 async def analyze_tone_endpoint(
     target_keyword: str = Body(..., description="분석할 키워드"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부")
 ):
     """톤 분석을 수행합니다."""
     try:
@@ -422,7 +422,7 @@ async def recommend_keywords_endpoint(
     recommendation_type: str = Body("all", description="추천 유형: all, semantic, co_occurring, hierarchical, trending, alternative"),
     max_results: int = Body(10, description="최대 결과 수"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부")
 ):
     """관련 키워드를 추천합니다."""
     try:
@@ -458,7 +458,7 @@ async def comprehensive_analysis_endpoint(
     target_keyword: str = Body(..., description="분석할 키워드"),
     target_type: str = Body("keyword", description="분석 유형: keyword, audience, comprehensive"),
     additional_context: Optional[str] = Body(None, description="추가 컨텍스트 정보"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부"),
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부"),
     analysis_depth: str = Body("standard", description="분석 깊이: basic, standard, deep")
 ):
     """종합 분석을 수행합니다 (기본 분석 + 정성적 분석 + 키워드 추천)."""
@@ -528,7 +528,7 @@ async def comprehensive_analysis_endpoint(
 async def compare_keywords_endpoint(
     keywords: List[str] = Body(..., description="비교할 키워드 목록"),
     comparison_aspects: Optional[List[str]] = Body(None, description="비교 관점: sentiment, context, trend, market"),
-    use_gemini: bool = Body(False, description="Gemini API 사용 여부")
+    use_gemini: bool = Body(True, description="Gemini API 사용 여부")
 ):
     """여러 키워드를 비교 분석합니다."""
     try:
